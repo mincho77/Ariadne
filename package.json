@@ -1,0 +1,18 @@
+{
+  "name": "ariadne",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local multi-project hub for Ariadne governance and Backlog.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mincho77/Ariadne.git"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "backlog.md": "latest"
+  }
+}

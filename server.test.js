@@ -1,0 +1,34 @@
+const test = require('node:test'); const assert = require('node:assert/strict'); const { slugify, parseTask, sortTasksByPriority, nextQueuedTask, taskDetail, taskDetailHtml, queueBoardPage } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+test('slugify produces stable local ids', () => assert.equal(slugify('JurisMate IA / Tokens'), 'jurismate-ia-tokens'));
+test('parseTask reads Backlog id, status and metadata', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'ARIADNE-1 - Demo.md'); fs.writeFileSync(file, '---\nid: ARIADNE-1\nstatus: In Progress\npriority: Ultra High\ntype: bug\nordinal: 1000\n---\n'); assert.deepEqual(parseTask(file), { id: 'ARIADNE-1', title: 'Demo', status: 'In Progress', priority: 'Ultra High', type: 'bug', ordinal: 1000 }); });
+test('parseTask unfolds YAML multiline titles', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'JM-19 - Pretensiones.md'); fs.writeFileSync(file, '---\nid: JM-19\ntitle: >-\n  BUG producción · Justo no resuelve extracción\n  de pretensiones\nstatus: To Do\n---\n'); assert.equal(parseTask(file).title, 'BUG producción · Justo no resuelve extracción de pretensiones'); });
+test('sortTasksByPriority puts production incidents first', () => { const tasks = [{ title: 'normal', priority: 'Medium' }, { title: 'prod', priority: 'Ultra High' }, { title: 'high', priority: 'High' }]; assert.deepEqual(sortTasksByPriority(tasks).map((task) => task.title), ['prod', 'high', 'normal']); });
+test('nextQueuedTask chooses highest priority and lowest ordinal', () => { const tasks = [{ title: 'later', status: 'Queued', priority: 'High', ordinal: 20 }, { title: 'first', status: 'Queued', priority: 'Ultra High', ordinal: 30 }, { title: 'todo', status: 'To Do', priority: 'Ultra High', ordinal: 1 }]; assert.equal(nextQueuedTask(tasks).title, 'first'); });
+test('taskDetail hides frontmatter from the task modal', () => { const detail = taskDetail('---\ntitle: Demo\npriority: Ultra High\n---\n\n## Description\n\nTexto útil'); assert.equal(detail, 'Description\n\nTexto útil'); });
+test('taskDetailHtml renders readable sections and checklists safely', () => { const html = taskDetailHtml('---\ntitle: Demo\n---\n\n## Description\n\nTexto **útil**\n\n## Acceptance Criteria\n<!-- AC:BEGIN -->\n- [x] #1 Listo\n- [ ] #2 <script>alert(1)</script>\n<!-- AC:END -->'); assert.match(html, /<section class="detail-section">/); assert.match(html, /<h3>Description<\/h3>/); assert.match(html, /check-item checked/); assert.doesNotMatch(html, /<script>/); assert.doesNotMatch(html, /AC:BEGIN|title: Demo/); });
+test('queue board exposes ordered queue and drag targets for every status', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-board-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-1 - Primero.md'), '---\nid: JM-1\ntitle: Primero\nstatus: Queued\npriority: Ultra High\ntype: bug\nordinal: 1\n---\n\n## Description\n\nPrimero');
+  fs.writeFileSync(path.join(dir, 'jm-2 - Segundo.md'), '---\nid: JM-2\ntitle: Segundo\nstatus: Queued\npriority: High\ntype: task\nordinal: 2\n---\n');
+  const html = queueBoardPage({ name: 'Demo', slug: 'demo', path: root });
+  assert.match(html, /class="column queue-column" data-column="Queued"/);
+  assert.match(html, /class="queue-position"[^>]*><small>Turno<\/small>1/);
+  assert.match(html, /draggable="true"/);
+  for (const status of ['To Do', 'Queued', 'In Progress', 'Done']) assert.match(html, new RegExp(`data-column="${status}"`));
+  assert.match(html, /addEventListener\('drop'/);
+});
+test('queue board search really hides cards and updates column state', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-board-search-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-1 - Cache.md'), '---\nid: JM-1\ntitle: Cache\nstatus: To Do\npriority: Ultra High\ntype: bug\nordinal: 1\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-2 - Racha.md'), '---\nid: JM-2\ntitle: Racha\nstatus: Done\npriority: High\ntype: bug\nordinal: 2\n---\n');
+  const html = queueBoardPage({ name: 'Demo', slug: 'demo', path: root });
+  assert.match(html, /\.task\[hidden\]\{display:none!important\}/);
+  assert.match(html, /card\.classList\.toggle\('search-match'/);
+  assert.match(html, /countEl\.textContent=count/);
+  assert.match(html, /column\.classList\.toggle\('search-no-results'/);
+  assert.match(html, /<p class="search-empty">Sin coincidencias en esta columna\.<\/p>/);
+});

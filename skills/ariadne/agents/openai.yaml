@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ariadne"
+  short_description: "Seguimiento riguroso de planes sin olvidos"
+  default_prompt: "Usa $ariadne para convertir este trabajo en un plan trazable y mantenerlo actualizado hasta cierre."

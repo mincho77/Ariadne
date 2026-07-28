@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ariadne.hub</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/mauriciootalvaro/.nvm/versions/node/v20.20.2/bin/node</string>
+    <string>/Users/mauriciootalvaro/Code/Ariadne/server.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/mauriciootalvaro/Code/Ariadne</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/ariadne-hub.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/ariadne-hub-error.log</string>
+</dict>
+</plist>
