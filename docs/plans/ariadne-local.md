@@ -2,10 +2,10 @@
 
 ## Control
 - Estado: en_progreso
-- Última actualización: 2026-07-28
+- Última actualización: 2026-07-29
 - Objetivo: administrar varios proyectos locales con tableros Markdown, reglas Ariadne y recuperación clara de trabajo.
-- Gate actual: JM-46 corregido y aprobado por Pharos; despliegue de configuración verificado.
-- Próxima acción: confirmar que los documentos extraídos de los ZIP aparecen en los casos; cerrar JM-43 solo con aceptación interactiva.
+- Gate actual: repo standalone `mincho77/Ariadne` operativo; Kanban del Hub con edición, columnas iguales y cola manual repriorizable.
+- Próxima acción: evaluar `AH-5` / modo liviano de Ariadne cuando el usuario quiera optimizar costo de tokens.
 
 ## Alcance
 
@@ -27,7 +27,7 @@
 
 - Bind local únicamente en `127.0.0.1`.
 - No ejecutar comandos destructivos sobre proyectos registrados.
-- No editar Markdown directamente desde la interfaz si Backlog.md ofrece una operación equivalente.
+- Preferir CLI/MCP de Backlog para cambios de estado; la edición de Markdown completo desde el Kanban queda permitida cuando el usuario necesita ajustar textos manualmente.
 - Los proyectos conservan sus archivos en disco y Git sigue siendo opcional.
 
 ## Métricas de éxito
@@ -83,6 +83,11 @@
 | ARLOCAL-038 | 8 Producción | Recuperar documentos detenidos porque onFileUpload no inicia | hecho | ARLOCAL-037 | Trigger procesa eventos sin 500; seis PDF del caso quedan resueltos sin duplicados; se auditan todos los casos y cargas del día | Backlog `JM-44` Done; revisión `onfileupload-00163-zhr` con `DATABASE_URL` v10 y 100% del tráfico; desde 00:00 Colombia: 246 eventos, 2 casos creados, 6 cargas; seis archivos `PROCESADO`/OK; segundo caso sin archivos; borrador temporal eliminado | Vigilar nuevos errores de inicio; mantener secretos vigentes en próximos despliegues |
 | ARLOCAL-039 | 8 Producción | Recuperar ZIP detenidos porque onZipBatchUpload no inicia | hecho | ARLOCAL-038 | Trigger inicia con secreto vigente; lotes pendientes se procesan; no quedan ZIP temporales abandonados | Backlog `JM-45` Done; revisión `onzipbatchupload-00027-pjf` con `DATABASE_URL` v10 y 100% del tráfico; seis lotes recuperados; consulta final `_batch/*.zip` sin objetos | Confirmar que los documentos extraídos aparecen en los casos y vigilar errores nuevos |
 | ARLOCAL-040 | 8 Producción | Eliminar referencias globales a DATABASE_URL v9 deshabilitada | hecho | ARLOCAL-038, ARLOCAL-039 | Inventario completo en v10; cero funciones en v9; secretos y variables Firebase preservados; todas las funciones ACTIVE sin errores de arranque | Backlog `JM-46` Done; 49 funciones en v10, 0 en v9; 39 Gen1 con GCLOUD_PROJECT/GCP_PROJECT/FIREBASE_CONFIG restaurados; todas ACTIVE; cero errores nuevos desde 19:46Z | En la próxima rotación, conciliar secretos y variables de plataforma antes de deshabilitar una versión |
+| ARLOCAL-041 | 12 Repo | Extraer Ariadne a repositorio standalone | hecho | ARLOCAL-011 | Existe repo propio con Hub, skill, planes y GitHub publicado | Backlog `AH-1` Done; commit `af2bdeb`; https://github.com/mincho77/Ariadne | Mantener JurisMate como proyecto externo en `projects.json` |
+| ARLOCAL-042 | 12 Hub | Editar Markdown de tareas desde el Kanban | hecho | ARLOCAL-041 | Modal permite editar y guardar Markdown completo con validación de frontmatter e `id` | Backlog `AH-2` Done; commit `657782e`; API `/api/tasks/content`; pruebas 13/13 | Usar para ajustes manuales puntuales |
+| ARLOCAL-043 | 12 Hub | Igualar altura de columnas del tablero | hecho | ARLOCAL-041 | Todas las columnas comparten altura y la zona inferior acepta drop | Backlog `AH-3` Done; commit `657782e`; CSS `align-items:stretch` | Mantener al cambiar layout |
+| ARLOCAL-044 | 12 Hub | Repriorizar cola manualmente | hecho | ARLOCAL-016, ARLOCAL-041 | Queue ordena por `ordinal`; arrastre actualiza turnos y persiste en Backlog | Backlog `AH-4` Done; commit `71f19d1`; API `/api/tasks/queue-order`; pruebas 14/14 | Usar turno 1 como siguiente a ejecutar |
+| ARLOCAL-045 | 12 Hub | Evaluar modo liviano de Ariadne | pendiente | ARLOCAL-007 | Existe decisión sobre `ariadne-lite` o wrapper de modelo barato | Backlog `AH-5` To Do; ledger `docs/plans/ariadne-mejoras.md` | Retomar cuando el usuario quiera optimizar costo |
 
 ## Riesgos
 
@@ -108,6 +113,8 @@
 | 2026-07-27 | ARLDEC-008 | Mostrar la cola como una secuencia numerada y permitir movimiento entre todos los estados | El usuario necesita expresar orden operativo y corregir el flujo sin editar Markdown | Cola violeta con turnos; arrastre y botones alternativos persisten mediante Backlog |
 | 2026-07-27 | ARLDEC-009 | No crear tarea por Firestore Listen 404 | El changelog lo identifica como comportamiento benigno de WebChannel SDK | Se conserva como nota operativa, no como bug accionable |
 | 2026-07-28 | ARLDEC-010 | Separar mejoras internas de Ariadne en un proyecto propio | El enrutamiento de modelo y ahorro de tokens es infraestructura de trabajo, no bug productivo de JurisMate | Se crea `docs/plans/ariadne-mejoras.md` y `JM-42` |
+| 2026-07-29 | ARLDEC-011 | Publicar Ariadne como repo standalone | Facilita clonar el Hub en otra máquina sin arrastrar JurisMate | Repo `mincho77/Ariadne`; backlog propio con prefijo `AH` |
+| 2026-07-29 | ARLDEC-012 | La cola operativa usa orden manual por `ordinal` | El usuario necesita decidir turnos explícitos, no solo prioridad automática | Queue deja de reordenar por prioridad al mostrar turnos |
 
 ## Diferidos
 
@@ -176,3 +183,8 @@
 - 2026-07-28: Se abrió y cerró JM-46 Ultra High para auditar todos los consumidores de `DATABASE_URL`. Se encontró `onFileDeleted` y 39 funciones antiguas aún en v9; se migraron preservando los demás secretos y reutilizando los artefactos desplegados. Conciliación final: 49 funciones en v10, cero en v9, todas ACTIVE y sin nuevos abortos por la versión deshabilitada.
 - 2026-07-28: Pharos reabrió JM-46 antes del despliegue final: el PATCH directo de Gen1 conservó secretos pero perdió variables de plataforma Firebase. `syncCasoToPostgres`, `processDocumentImages`, `warmupApiV2` y `refreshLawyerStatsHourly` registraron errores reales. Se inició recuperación global agregando GCLOUD_PROJECT, GCP_PROJECT y FIREBASE_CONFIG sin alterar código.
 - 2026-07-28: Pharos cerró JM-46 después de corregir el bloqueante: las 39 funciones Gen1 recuperaron GCLOUD_PROJECT/GCP_PROJECT/FIREBASE_CONFIG, conservaron DATABASE_URL v10 y quedaron ACTIVE. No hay consumidores en v9 ni errores nuevos de variables Firebase desde 19:46Z. El HTML público de carga coincide por SHA-256 con el local, por lo que no se hizo un Hosting no-op.
+- 2026-07-28: Se extrajo el Hub a `/Users/mauriciootalvaro/Code/Ariadne` y se publicó en GitHub como `mincho77/Ariadne` (`af2bdeb`). JurisMate quedó registrado como proyecto externo.
+- 2026-07-29: Se añadió edición de Markdown completo desde el modal del Kanban (`657782e`, `AH-2`).
+- 2026-07-29: Se igualó la altura de columnas para facilitar drag-and-drop entre columnas de distinta carga (`657782e`, `AH-3`).
+- 2026-07-29: Se habilitó repriorización manual de la cola con turnos visibles y persistencia por `ordinal` (`71f19d1`, `AH-4`).
+- 2026-07-29: Se creó backlog propio del repo (`backlog/tasks/ah-1` a `ah-5`) para ver el avance del Hub en `http://127.0.0.1:6422/?project=ariadne`.
