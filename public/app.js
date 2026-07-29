@@ -1,6 +1,64 @@
-const projects = document.querySelector('#projects'); const empty = document.querySelector('#empty'); const dialog = document.querySelector('#dialog');
-async function load() { const response = await fetch('/api/projects', { cache: 'no-store' }); const data = await response.json(); projects.innerHTML = data.map(card).join(''); empty.hidden = data.length > 0; projects.querySelectorAll('[data-board]').forEach((button) => button.onclick = () => openBoard(button.dataset.board)); }
-function card(p) { const state = p.blocked ? 'Bloqueado' : p.active ? 'En progreso' : p.tasks ? 'En espera' : 'Sin tareas'; return `<article class="card"><div class="card-head"><h2>${escapeHtml(p.name)}</h2><span class="state ${p.blocked ? 'blocked' : ''}">${state}</span></div><p class="path">${escapeHtml(p.path)}</p><div class="meter"><i style="width:${p.progress}%"></i></div><div class="stats"><b>${p.progress}%</b><span>${p.done}/${p.tasks} tareas</span><span>${p.blocked} bloqueadas</span></div><p class="next"><b>Siguiente:</b> ${escapeHtml(p.next || 'definir alcance')}</p><button data-board="${escapeHtml(p.slug)}" class="primary">Abrir tablero</button></article>`; }
-async function openBoard(slug) { const response = await fetch(`/api/projects/${slug}/browser`, { method: 'POST' }); const data = await response.json(); if (data.url) window.open(data.url, '_blank', 'noopener'); else alert(data.error || 'No se pudo abrir el tablero'); }
-function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char])); }
-document.querySelector('#new-project').onclick = () => dialog.showModal(); document.querySelector('#project-form').onsubmit = async (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.target)); const response = await fetch('/api/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) }); if (!response.ok) return alert((await response.json()).error); dialog.close(); event.target.reset(); load(); }; window.addEventListener('focus', load); document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); }); load();
+const projects = document.querySelector('#projects');
+const empty = document.querySelector('#empty');
+const dialog = document.querySelector('#dialog');
+
+async function load() {
+  const response = await fetch('/api/projects', { cache: 'no-store' });
+  const data = await response.json();
+  projects.innerHTML = data.map(card).join('');
+  empty.hidden = data.length > 0;
+  projects.querySelectorAll('[data-board]').forEach((button) => {
+    button.onclick = () => openBoard(button.dataset.board);
+  });
+  projects.querySelectorAll('[data-bugs]').forEach((button) => {
+    button.onclick = () => openBoard(button.dataset.bugs, 'bugs');
+  });
+}
+
+function card(p) {
+  const state = p.blocked ? 'Bloqueado' : p.active ? 'En progreso' : p.tasks ? 'En espera' : 'Sin tareas';
+  const bugLine = p.bugs
+    ? `<p class="bugs"><b>${p.bugsOpen}/${p.bugs}</b> bugs abiertos${p.topBugTheme ? ` · foco: ${escapeHtml(p.topBugTheme)}` : ''}</p>`
+    : '';
+  return `<article class="card">
+    <div class="card-head"><h2>${escapeHtml(p.name)}</h2><span class="state ${p.blocked ? 'blocked' : ''}">${state}</span></div>
+    <p class="path">${escapeHtml(p.path)}</p>
+    <div class="meter"><i style="width:${p.progress}%"></i></div>
+    <div class="stats"><b>${p.progress}%</b><span>${p.done}/${p.tasks} tareas</span><span>${p.blocked} bloqueadas</span></div>
+    ${bugLine}
+    <p class="next"><b>Siguiente:</b> ${escapeHtml(p.next || 'definir alcance')}</p>
+    <div class="card-actions">
+      <button data-board="${escapeHtml(p.slug)}" class="primary">Abrir tablero</button>
+      <button data-bugs="${escapeHtml(p.slug)}" class="secondary">Ver bugs</button>
+    </div>
+  </article>`;
+}
+
+async function openBoard(slug, view) {
+  const response = await fetch(`/api/projects/${slug}/browser`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(view ? { view } : {}),
+  });
+  const data = await response.json();
+  if (data.url) window.open(data.url, '_blank', 'noopener');
+  else alert(data.error || 'No se pudo abrir el tablero');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+}
+
+document.querySelector('#new-project').onclick = () => dialog.showModal();
+document.querySelector('#project-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  const response = await fetch('/api/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+  if (!response.ok) return alert((await response.json()).error);
+  dialog.close();
+  event.target.reset();
+  load();
+};
+window.addEventListener('focus', load);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+load();

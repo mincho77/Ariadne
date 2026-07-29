@@ -4,7 +4,7 @@
 - Estado: en_progreso
 - Última actualización: 2026-07-29
 - Objetivo: administrar varios proyectos locales con tableros Markdown, reglas Ariadne y recuperación clara de trabajo.
-- Gate actual: repo standalone `mincho77/Ariadne` operativo; Kanban del Hub con edición, columnas iguales y cola manual repriorizable.
+- Gate actual: repo standalone operativo; Kanban con edición, cola manual y módulo de bugs con analytics por tema.
 - Próxima acción: evaluar `AH-5` / modo liviano de Ariadne cuando el usuario quiera optimizar costo de tokens.
 
 ## Alcance
@@ -88,6 +88,7 @@
 | ARLOCAL-043 | 12 Hub | Igualar altura de columnas del tablero | hecho | ARLOCAL-041 | Todas las columnas comparten altura y la zona inferior acepta drop | Backlog `AH-3` Done; commit `657782e`; CSS `align-items:stretch` | Mantener al cambiar layout |
 | ARLOCAL-044 | 12 Hub | Repriorizar cola manualmente | hecho | ARLOCAL-016, ARLOCAL-041 | Queue ordena por `ordinal`; arrastre actualiza turnos y persiste en Backlog | Backlog `AH-4` Done; commit `71f19d1`; API `/api/tasks/queue-order`; pruebas 14/14 | Usar turno 1 como siguiente a ejecutar |
 | ARLOCAL-045 | 12 Hub | Evaluar modo liviano de Ariadne | pendiente | ARLOCAL-007 | Existe decisión sobre `ariadne-lite` o wrapper de modelo barato | Backlog `AH-5` To Do; ledger `docs/plans/ariadne-mejoras.md` | Retomar cuando el usuario quiera optimizar costo |
+| ARLOCAL-046 | 12 Hub | Módulo de bugs con analytics por tema | hecho | ARLOCAL-041 | Vista bugs filtra incidencias, muestra KPIs, barras y tabla comparativa por tema | Backlog `AH-6` Done; `bugs-board.js`; `view=bugs`; API `/api/bugs/stats` | Refinar reglas de tema según uso real |
 
 ## Riesgos
 
@@ -188,3 +189,4 @@
 - 2026-07-29: Se igualó la altura de columnas para facilitar drag-and-drop entre columnas de distinta carga (`657782e`, `AH-3`).
 - 2026-07-29: Se habilitó repriorización manual de la cola con turnos visibles y persistencia por `ordinal` (`71f19d1`, `AH-4`).
 - 2026-07-29: Se creó backlog propio del repo (`backlog/tasks/ah-1` a `ah-5`) para ver el avance del Hub en `http://127.0.0.1:6422/?project=ariadne`.
+- 2026-07-29: Se añadió módulo de bugs por proyecto con Kanban filtrado, estadísticas por tema y tabla comparativa (`AH-6`, `bugs-board.js`, `/?project=<slug>&view=bugs`).

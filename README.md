@@ -20,6 +20,8 @@ npm start
 
 En el detalle de cualquier tarea del Kanban, usa **Editar texto** para modificar el Markdown completo (descripción, criterios de aceptación, plan, etc.) y **Guardar cambios**. El archivo se escribe en `backlog/` del proyecto.
 
+**Módulo de bugs:** http://127.0.0.1:6421/?project=jurismate&view=bugs (estadísticas por tema + Kanban solo bugs).
+
 ## Estructura
 
 ```

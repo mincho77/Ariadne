@@ -3,6 +3,11 @@ const net = require('node:net');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const {
+  isBugTask,
+  buildBugStats,
+  bugsBoardPage,
+} = require('./bugs-board');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -52,7 +57,22 @@ function parseTask(file) {
     title = continuation;
   }
   if (!title) title = path.basename(file).replace(/^[^-]+-\d+\s*-\s*/, '').replace(/\.md$/, '').replace(/-/g, ' ');
-  return { id: idMatch ? idMatch[1].trim() : '', title, status: match ? match[1].trim() : 'To Do', priority: priorityLabel(priorityMatch ? priorityMatch[1].trim() : 'Medium'), type: typeMatch ? typeMatch[1].trim() : 'task', ordinal: Number(ordinalMatch?.[1] || Number.MAX_SAFE_INTEGER) };
+  const labels = [];
+  const labelsBlock = source.match(/^labels:\s*\n((?:\s+-\s+.+\n?)*)/m);
+  if (labelsBlock) {
+    for (const match of labelsBlock[1].matchAll(/^\s+-\s+(.+)$/gm)) labels.push(match[1].trim());
+  }
+  const createdMatch = source.match(/^created_date:\s*['"]?([^'"\n]+)['"]?\s*$/mi);
+  return {
+    id: idMatch ? idMatch[1].trim() : '',
+    title,
+    status: match ? match[1].trim() : 'To Do',
+    priority: priorityLabel(priorityMatch ? priorityMatch[1].trim() : 'Medium'),
+    type: typeMatch ? typeMatch[1].trim() : 'task',
+    ordinal: Number(ordinalMatch?.[1] || Number.MAX_SAFE_INTEGER),
+    labels,
+    createdDate: createdMatch ? createdMatch[1].trim() : '',
+  };
 }
 
 const PRIORITY_ORDER = new Map([['ultra high', 0], ['high', 1], ['medium', 2], ['low', 3]]);
@@ -154,13 +174,15 @@ function projectTasks(project) {
 
 function summarize(project) {
   const tasks = projectTasks(project);
+  const bugs = tasks.filter(isBugTask);
   const done = tasks.filter((task) => /done|complete/i.test(task.status)).length;
   const active = tasks.filter((task) => /in progress|doing/i.test(task.status)).length;
   const blocked = tasks.filter((task) => /blocked/i.test(task.status)).length;
   const next = tasks.find((task) => /in progress/i.test(task.status)) || tasks.find((task) => /to do|draft/i.test(task.status));
+  const bugStats = buildBugStats(bugs);
   return { ...project, exists: fs.existsSync(project.path), tasks: tasks.length, done, active, blocked,
     progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0, next: next ? next.title : null,
-    boardRunning: project.port === BOARD_PORT };
+    boardRunning: project.port === BOARD_PORT, bugs: bugStats.total, bugsOpen: bugStats.open, topBugTheme: bugStats.byTheme[0]?.theme || null };
 }
 
 function json(res, status, body) {
@@ -284,9 +306,25 @@ function isPortFree(port) {
   });
 }
 
-async function openBoard(project) {
+async function openBoard(project, view) {
   project.port = BOARD_PORT;
-  return `http://${HOST}:${BOARD_PORT}/?project=${encodeURIComponent(project.slug)}`;
+  const params = new URLSearchParams({ project: project.slug });
+  if (view) params.set('view', view);
+  return `http://${HOST}:${BOARD_PORT}/?${params}`;
+}
+
+function boardHelpers() {
+  return {
+    escapeHtml,
+    projectTasks,
+    sortTasksByPriority,
+    sortQueuedTasks,
+    taskDetailHtml,
+    priorityRank,
+    HOST,
+    PORT,
+    BOARD_PORT,
+  };
 }
 
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char])); }
@@ -467,8 +505,14 @@ async function handle(req, res) {
   if (req.method === 'POST' && board) {
     const project = readCatalog().find((item) => item.slug === board[1]);
     if (!project) return json(res, 404, { error: 'project not found' });
-    const url = await openBoard(project); writeCatalog(readCatalog().map((item) => item.slug === project.slug ? project : item));
-    return json(res, 200, { url });
+    try {
+      const data = await body(req);
+      const pageUrl = await openBoard(project, data.view || null);
+      writeCatalog(readCatalog().map((item) => item.slug === project.slug ? project : item));
+      return json(res, 200, { url: pageUrl });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
   }
   if (req.method === 'GET') {
     const asset = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
@@ -486,6 +530,12 @@ async function handleBoard(req, res) {
   const projects = readCatalog();
   const project = projects.find((item) => item.slug === url.searchParams.get('project')) || projects[0];
   if (!project) return res.end('No hay proyectos registrados en Ariadne Hub.');
+  if (req.method === 'GET' && url.pathname === '/api/bugs/stats') {
+    const project = projects.find((item) => item.slug === url.searchParams.get('project')) || projects[0];
+    if (!project) return json(res, 404, { error: 'project not found' });
+    const bugs = projectTasks(project).filter(isBugTask);
+    return json(res, 200, buildBugStats(bugs));
+  }
   if (req.method === 'POST' && url.pathname === '/api/tasks/status') {
     try {
       const data = await body(req);
@@ -514,6 +564,7 @@ async function handleBoard(req, res) {
     }
   }
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  if (url.searchParams.get('view') === 'bugs') return res.end(bugsBoardPage(project, boardHelpers()));
   res.end(queueBoardPage(project));
 }
 
@@ -522,4 +573,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage };
