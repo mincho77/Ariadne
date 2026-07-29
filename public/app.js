@@ -8,28 +8,52 @@ async function load() {
   projects.innerHTML = data.map(card).join('');
   empty.hidden = data.length > 0;
   projects.querySelectorAll('[data-board]').forEach((button) => {
-    button.onclick = () => openBoard(button.dataset.board);
-  });
-  projects.querySelectorAll('[data-bugs]').forEach((button) => {
-    button.onclick = () => openBoard(button.dataset.bugs, 'bugs');
+    button.onclick = () => openBoard(button.dataset.board, button.dataset.view);
   });
 }
 
 function card(p) {
-  const state = p.blocked ? 'Bloqueado' : p.active ? 'En progreso' : p.tasks ? 'En espera' : 'Sin tareas';
-  const bugLine = p.bugs
-    ? `<p class="bugs"><b>${p.bugsOpen}/${p.bugs}</b> bugs abiertos${p.topBugTheme ? ` · foco: ${escapeHtml(p.topBugTheme)}` : ''}</p>`
-    : '';
-  return `<article class="card">
-    <div class="card-head"><h2>${escapeHtml(p.name)}</h2><span class="state ${p.blocked ? 'blocked' : ''}">${state}</span></div>
+  const bugsOpen = Number(p.bugsOpen ?? 0);
+  const improvementsTotal = Number(p.improvements ?? p.tasks ?? 0);
+  const improvementsDone = Number(p.done ?? 0);
+  const improvementsOpen = Number(p.improvementsOpen ?? Math.max(0, improvementsTotal - improvementsDone));
+  const bugProgress = Number(p.bugProgress ?? 0);
+  const progress = Number(p.progress ?? 0);
+  const focus = p.focus ?? (bugsOpen > 0 ? 'bugs' : 'mejoras');
+  const focusLabel = focus === 'bugs' ? 'Prioridad: bugs' : 'Enfoque: mejoras';
+  const focusClass = focus === 'bugs' ? 'bugs' : 'mejoras';
+  const bugsNext = p.nextBug || 'Sin bugs pendientes';
+  const mejoraNext = p.next || 'Sin mejoras pendientes';
+  const bugsActionClass = focus === 'bugs' ? '' : ' secondary-style';
+  const mejoraActionClass = focus === 'mejoras' ? '' : ' secondary-style';
+
+  return `<article class="project-card">
+    <div class="card-top">
+      <h2>${escapeHtml(p.name)}</h2>
+      <span class="focus-pill ${focusClass}">${focusLabel}</span>
+    </div>
     <p class="path">${escapeHtml(p.path)}</p>
-    <div class="meter"><i style="width:${p.progress}%"></i></div>
-    <div class="stats"><b>${p.progress}%</b><span>${p.done}/${p.tasks} tareas</span><span>${p.blocked} bloqueadas</span></div>
-    ${bugLine}
-    <p class="next"><b>Siguiente:</b> ${escapeHtml(p.next || 'definir alcance')}</p>
-    <div class="card-actions">
-      <button data-board="${escapeHtml(p.slug)}" class="primary">Abrir tablero</button>
-      <button data-bugs="${escapeHtml(p.slug)}" class="secondary">Ver bugs</button>
+    <div class="lanes">
+      <section class="lane lane-bugs" aria-label="Resumen de bugs">
+        <div class="lane-head">
+          <span class="lane-label">Bugs</span>
+          <span class="lane-count">${bugsOpen}</span>
+        </div>
+        <div class="lane-progress" aria-hidden="true"><i style="width:${bugProgress}%"></i></div>
+        <p class="lane-meta">${bugsOpen} abiertos · ${bugProgress}% resueltos</p>
+        <p class="lane-next"><em>Siguiente</em>${escapeHtml(bugsNext)}</p>
+        <button data-board="${escapeHtml(p.slug)}" data-view="bugs" class="lane-action${bugsActionClass}">Abrir bugs</button>
+      </section>
+      <section class="lane lane-mejoras" aria-label="Resumen de mejoras">
+        <div class="lane-head">
+          <span class="lane-label">Mejoras</span>
+          <span class="lane-count">${improvementsOpen}</span>
+        </div>
+        <div class="lane-progress" aria-hidden="true"><i style="width:${progress}%"></i></div>
+        <p class="lane-meta">${improvementsOpen} abiertas · ${progress}% hechas</p>
+        <p class="lane-next"><em>Siguiente</em>${escapeHtml(mejoraNext)}</p>
+        <button data-board="${escapeHtml(p.slug)}" data-view="mejoras" class="lane-action${mejoraActionClass}">Abrir mejoras</button>
+      </section>
     </div>
   </article>`;
 }
@@ -38,7 +62,7 @@ async function openBoard(slug, view) {
   const response = await fetch(`/api/projects/${slug}/browser`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(view ? { view } : {}),
+    body: JSON.stringify({ view }),
   });
   const data = await response.json();
   if (data.url) window.open(data.url, '_blank', 'noopener');

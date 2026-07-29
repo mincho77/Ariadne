@@ -20,7 +20,10 @@ npm start
 
 En el detalle de cualquier tarea del Kanban, usa **Editar texto** para modificar el Markdown completo y **Guardar cambios**.
 
-**Módulo de bugs:** http://127.0.0.1:6421/?project=jurismate&view=bugs
+**Tablero de bugs:** http://127.0.0.1:6421/?project=jurismate&view=bugs  
+**Tablero de mejoras:** http://127.0.0.1:6421/?project=jurismate&view=mejoras  
+
+El Hub muestra dos carriles separados por proyecto. Al abrir un tablero sin `view`, redirige a bugs si hay abiertos; si no, a mejoras. Ya no hay vista mixta por defecto.
 
 ## Estructura
 

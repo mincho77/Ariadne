@@ -8,6 +8,16 @@ const {
   buildBugStats,
   bugsBoardPage,
 } = require('./bugs-board');
+const {
+  isImprovementTask,
+  buildImprovementStats,
+  mejorasBoardPage,
+} = require('./mejoras-board');
+const {
+  boardCounts,
+  boardNavHtml,
+  boardNavStyles,
+} = require('./board-chrome');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -93,6 +103,22 @@ function nextQueuedTask(tasks) {
   return sortQueuedTasks(tasks.filter((task) => task.status.toLowerCase() === 'queued'))[0] || null;
 }
 
+function pickNextBug(tasks) {
+  const sorted = sortTasksByPriority(tasks.filter(isBugTask));
+  const task = sorted.find((item) => /^in progress$/i.test(item.status))
+    || sorted.find((item) => /^queued$/i.test(item.status))
+    || sorted.find((item) => /^to do$/i.test(item.status));
+  return task ? { id: task.id, title: task.title } : null;
+}
+
+function pickNextImprovement(tasks) {
+  const sorted = sortTasksByPriority(tasks.filter(isImprovementTask));
+  const task = sorted.find((item) => /^in progress$/i.test(item.status))
+    || sorted.find((item) => /^queued$/i.test(item.status))
+    || sorted.find((item) => /^to do$/i.test(item.status));
+  return task ? { id: task.id, title: task.title } : null;
+}
+
 function taskDetail(source) {
   return String(source || '')
     .replace(/^---[\s\S]*?---\s*/m, '')
@@ -175,14 +201,31 @@ function projectTasks(project) {
 function summarize(project) {
   const tasks = projectTasks(project);
   const bugs = tasks.filter(isBugTask);
-  const done = tasks.filter((task) => /done|complete/i.test(task.status)).length;
-  const active = tasks.filter((task) => /in progress|doing/i.test(task.status)).length;
-  const blocked = tasks.filter((task) => /blocked/i.test(task.status)).length;
-  const next = tasks.find((task) => /in progress/i.test(task.status)) || tasks.find((task) => /to do|draft/i.test(task.status));
-  const bugStats = buildBugStats(bugs);
-  return { ...project, exists: fs.existsSync(project.path), tasks: tasks.length, done, active, blocked,
-    progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0, next: next ? next.title : null,
-    boardRunning: project.port === BOARD_PORT, bugs: bugStats.total, bugsOpen: bugStats.open, topBugTheme: bugStats.byTheme[0]?.theme || null };
+  const improvements = tasks.filter(isImprovementTask);
+  const bugsDone = bugs.filter((task) => /done|complete/i.test(task.status)).length;
+  const impDone = improvements.filter((task) => /done|complete/i.test(task.status)).length;
+  const nextBug = pickNextBug(tasks);
+  const nextImprovement = pickNextImprovement(tasks);
+  return {
+    ...project,
+    exists: fs.existsSync(project.path),
+    bugs: bugs.length,
+    bugsOpen: bugs.length - bugsDone,
+    bugsActive: bugs.filter((task) => /in progress|doing/i.test(task.status)).length,
+    bugProgress: bugs.length ? Math.round((bugsDone / bugs.length) * 100) : 0,
+    nextBug: nextBug ? `${nextBug.id ? `${nextBug.id} · ` : ''}${nextBug.title}` : null,
+    improvements: improvements.length,
+    improvementsOpen: improvements.length - impDone,
+    improvementsActive: improvements.filter((task) => /in progress|doing/i.test(task.status)).length,
+    progress: improvements.length ? Math.round((impDone / improvements.length) * 100) : 0,
+    done: impDone,
+    tasks: improvements.length,
+    active: improvements.filter((task) => /in progress|doing/i.test(task.status)).length,
+    blocked: improvements.filter((task) => /blocked/i.test(task.status)).length,
+    next: nextImprovement ? `${nextImprovement.id ? `${nextImprovement.id} · ` : ''}${nextImprovement.title}` : null,
+    focus: bugs.length - bugsDone > 0 ? 'bugs' : 'mejoras',
+    boardRunning: project.port === BOARD_PORT,
+  };
 }
 
 function json(res, status, body) {
@@ -324,6 +367,11 @@ function boardHelpers() {
     HOST,
     PORT,
     BOARD_PORT,
+    boardCounts,
+    boardNavHtml,
+    boardNavStyles,
+    isBugTask,
+    isImprovementTask,
   };
 }
 
@@ -563,8 +611,16 @@ async function handleBoard(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  const view = url.searchParams.get('view');
+  if (!view) {
+    const counts = boardCounts(project, projectTasks, isBugTask, isImprovementTask);
+    const target = counts.bugsOpen > 0 ? 'bugs' : 'mejoras';
+    res.writeHead(302, { Location: `/?project=${encodeURIComponent(project.slug)}&view=${target}` });
+    return res.end();
+  }
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-  if (url.searchParams.get('view') === 'bugs') return res.end(bugsBoardPage(project, boardHelpers()));
+  if (view === 'bugs') return res.end(bugsBoardPage(project, boardHelpers()));
+  if (view === 'mejoras') return res.end(mejorasBoardPage(project, boardHelpers()));
   res.end(queueBoardPage(project));
 }
 
@@ -573,4 +629,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage };

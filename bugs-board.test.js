@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { isBugTask, inferBugTheme, buildBugStats, bugsBoardPage } = require('./bugs-board');
+const { isImprovementTask } = require('./mejoras-board');
+const { boardCounts, boardNavHtml, boardNavStyles } = require('./board-chrome');
 const { taskDetailHtml, priorityRank, sortTasksByPriority, sortQueuedTasks, projectTasks } = require('./server');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -48,12 +50,21 @@ test('bugs board renders analytics and filtered kanban', () => {
     sortQueuedTasks,
     taskDetailHtml,
     priorityRank,
+    boardCounts,
+    boardNavHtml,
+    boardNavStyles,
+    isBugTask,
+    isImprovementTask,
     HOST: '127.0.0.1',
     PORT: 4177,
     BOARD_PORT: 6421,
   });
-  assert.match(html, /MÓDULO DE BUGS/);
-  assert.match(html, /Comparativo por tema/);
+  assert.match(html, /class="segmented"/);
+  assert.match(html, /id="stats-toggle"/);
+  assert.match(html, /id="stats-detail" class="stats-detail is-collapsed"/);
+  assert.match(html, /id="refresh-board"/);
+  assert.match(html, /queue-column/);
+  assert.match(html, />Queue</);
   assert.match(html, /JM-1/);
   assert.doesNotMatch(html, /JM-2/);
 });

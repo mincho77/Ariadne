@@ -1,10 +1,10 @@
 ---
 id: AH-5
 title: HUB · Modo liviano y enrutamiento de modelo barato
-status: To Do
+status: Queued
 assignee: []
 created_date: '2026-07-28 00:00'
-updated_date: '2026-07-29 09:45'
+updated_date: '2026-07-29 15:09'
 labels:
   - ariadne
   - cost-control
@@ -13,7 +13,7 @@ references:
   - docs/plans/ariadne-mejoras.md
 priority: low
 type: enhancement
-ordinal: 1000
+ordinal: 10
 ---
 
 ## Description
