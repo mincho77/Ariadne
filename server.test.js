@@ -1,9 +1,10 @@
-const test = require('node:test'); const assert = require('node:assert/strict'); const { slugify, parseTask, sortTasksByPriority, nextQueuedTask, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, projectTasks } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+const test = require('node:test'); const assert = require('node:assert/strict'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, projectTasks } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
 test('slugify produces stable local ids', () => assert.equal(slugify('JurisMate IA / Tokens'), 'jurismate-ia-tokens'));
 test('parseTask reads Backlog id, status and metadata', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'ARIADNE-1 - Demo.md'); fs.writeFileSync(file, '---\nid: ARIADNE-1\nstatus: In Progress\npriority: Ultra High\ntype: bug\nordinal: 1000\n---\n'); assert.deepEqual(parseTask(file), { id: 'ARIADNE-1', title: 'Demo', status: 'In Progress', priority: 'Ultra High', type: 'bug', ordinal: 1000 }); });
 test('parseTask unfolds YAML multiline titles', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'JM-19 - Pretensiones.md'); fs.writeFileSync(file, '---\nid: JM-19\ntitle: >-\n  BUG producción · Justo no resuelve extracción\n  de pretensiones\nstatus: To Do\n---\n'); assert.equal(parseTask(file).title, 'BUG producción · Justo no resuelve extracción de pretensiones'); });
 test('sortTasksByPriority puts production incidents first', () => { const tasks = [{ title: 'normal', priority: 'Medium' }, { title: 'prod', priority: 'Ultra High' }, { title: 'high', priority: 'High' }]; assert.deepEqual(sortTasksByPriority(tasks).map((task) => task.title), ['prod', 'high', 'normal']); });
-test('nextQueuedTask chooses highest priority and lowest ordinal', () => { const tasks = [{ title: 'later', status: 'Queued', priority: 'High', ordinal: 20 }, { title: 'first', status: 'Queued', priority: 'Ultra High', ordinal: 30 }, { title: 'todo', status: 'To Do', priority: 'Ultra High', ordinal: 1 }]; assert.equal(nextQueuedTask(tasks).title, 'first'); });
+test('nextQueuedTask chooses lowest ordinal in queue', () => { const tasks = [{ title: 'later', status: 'Queued', priority: 'High', ordinal: 30 }, { title: 'first', status: 'Queued', priority: 'Medium', ordinal: 10 }, { title: 'todo', status: 'To Do', priority: 'Ultra High', ordinal: 1 }]; assert.equal(nextQueuedTask(tasks).title, 'first'); });
+test('sortQueuedTasks ignores priority and keeps manual order', () => { const tasks = [{ title: 'b', status: 'Queued', priority: 'Low', ordinal: 20 }, { title: 'a', status: 'Queued', priority: 'Ultra High', ordinal: 10 }]; assert.deepEqual(sortQueuedTasks(tasks).map((task) => task.title), ['a', 'b']); });
 test('taskDetail hides frontmatter from the task modal', () => { const detail = taskDetail('---\ntitle: Demo\npriority: Ultra High\n---\n\n## Description\n\nTexto útil'); assert.equal(detail, 'Description\n\nTexto útil'); });
 test('taskDetailHtml renders readable sections and checklists safely', () => { const html = taskDetailHtml('---\ntitle: Demo\n---\n\n## Description\n\nTexto **útil**\n\n## Acceptance Criteria\n<!-- AC:BEGIN -->\n- [x] #1 Listo\n- [ ] #2 <script>alert(1)</script>\n<!-- AC:END -->'); assert.match(html, /<section class="detail-section">/); assert.match(html, /<h3>Description<\/h3>/); assert.match(html, /check-item checked/); assert.doesNotMatch(html, /<script>/); assert.doesNotMatch(html, /AC:BEGIN|title: Demo/); });
 test('queue board exposes ordered queue and drag targets for every status', () => {
@@ -61,6 +62,9 @@ test('queue board exposes task text editor controls', () => {
   assert.match(html, /id="edit-task"/);
   assert.match(html, /id="source-editor"/);
   assert.match(html, /\/api\/tasks\/content/);
+  assert.match(html, /\/api\/tasks\/queue-order/);
+  assert.match(html, /buildQueueOrder/);
+  assert.match(html, /Arrastra dentro de la cola para cambiar el turno/);
 });
 test('queue board stretches columns for full-height drag targets', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-board-height-'));

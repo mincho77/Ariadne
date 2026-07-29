@@ -65,8 +65,12 @@ function sortTasksByPriority(tasks) {
   return [...tasks].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title, 'es'));
 }
 
+function sortQueuedTasks(tasks) {
+  return [...tasks].sort((a, b) => (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title, 'es'));
+}
+
 function nextQueuedTask(tasks) {
-  return sortTasksByPriority(tasks.filter((task) => task.status.toLowerCase() === 'queued'))[0] || null;
+  return sortQueuedTasks(tasks.filter((task) => task.status.toLowerCase() === 'queued'))[0] || null;
 }
 
 function taskDetail(source) {
@@ -218,12 +222,47 @@ function validateTaskSource(taskId, source) {
   return text;
 }
 
+async function applyQueueOrdinals(project, orderedIds) {
+  for (let i = 0; i < orderedIds.length; i += 1) {
+    await runBacklog(project, ['task', 'edit', orderedIds[i], '--ordinal', String((i + 1) * 10), '--plain']);
+  }
+}
+
+async function updateQueueOrder(project, orderedIds) {
+  const normalized = orderedIds.map((id) => String(id).trim()).filter(Boolean);
+  if (!normalized.length) throw new Error('la cola necesita al menos una tarea');
+  const seen = new Set();
+  for (const id of normalized) {
+    const key = id.toLowerCase();
+    if (seen.has(key)) throw new Error('hay tareas duplicadas en la cola');
+    seen.add(key);
+    const task = findTask(project, id);
+    if (!task) throw new Error(`tarea no encontrada: ${id}`);
+    if (task.status.toLowerCase() !== 'queued') {
+      await runBacklog(project, ['task', 'edit', task.id, '--status', 'Queued', '--plain']);
+    }
+  }
+  const queued = sortQueuedTasks(projectTasks(project).filter((task) => task.status.toLowerCase() === 'queued'));
+  const fullOrder = [...normalized];
+  const included = new Set(normalized.map((id) => id.toLowerCase()));
+  for (const task of queued) {
+    if (!included.has(task.id.toLowerCase())) fullOrder.push(task.id);
+  }
+  await applyQueueOrdinals(project, fullOrder);
+  return fullOrder;
+}
+
 async function updateTaskStatus(project, taskId, status) {
   const allowed = new Set(['To Do', 'Queued', 'In Progress', 'Done']);
   if (!allowed.has(status)) throw new Error('estado de tarea inválido');
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
+  const wasQueued = task.status.toLowerCase() === 'queued';
   await runBacklog(project, ['task', 'edit', task.id, '--status', status, '--plain']);
+  if (status === 'Queued' && !wasQueued) {
+    const queued = sortQueuedTasks(projectTasks(project).filter((item) => item.status.toLowerCase() === 'queued'));
+    await applyQueueOrdinals(project, [...queued.map((item) => item.id).filter((id) => id.toLowerCase() !== task.id.toLowerCase()), task.id]);
+  }
   return parseTask(path.join(project.path, 'backlog', task.file));
 }
 
@@ -278,21 +317,22 @@ function queueBoardPage(project) {
     { status: 'Done', label: 'Done', hint: 'Completed work' },
   ];
   const cards = columns.map(({ status, label, hint, queue }) => {
-    const items = sortTasksByPriority(tasks.filter((task) => task.status.toLowerCase() === status.toLowerCase()));
+    const items = (queue ? sortQueuedTasks : sortTasksByPriority)(tasks.filter((task) => task.status.toLowerCase() === status.toLowerCase()));
     const content = items.map((task, position) => {
       const index = tasks.indexOf(task);
       const searchable = `${task.id} ${task.title} ${task.priority} ${task.type} ${task.file}`.toLowerCase();
       const queuePosition = queue ? `<span class="queue-position" title="Posición en la cola"><small>Turno</small>${position + 1}</span>` : '';
+      const dragHint = queue ? '⋮⋮ Arrastrar para reordenar la cola' : '⋮⋮ Arrastrar para cambiar de estado';
       return `<button class="task${queue ? ' queue-task' : ''}${queue && position === 0 ? ' queue-next' : ''}" draggable="true" data-task="${index}" data-task-id="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status)}" data-search="${escapeHtml(searchable)}">
         ${queuePosition}
         <span class="task-heading"><strong class="task-id">${escapeHtml(task.id || 'SIN JM')}</strong><strong class="task-title">${escapeHtml(task.title)}</strong></span>
         <span class="task-meta"><span class="priority priority-${priorityRank(task.priority)}">${escapeHtml(task.priority)}</span><span class="type type-${escapeHtml(task.type)}">${escapeHtml(task.type)}</span></span>
-        <span class="drag-hint">⋮⋮ Arrastrar para cambiar de estado</span>
+        <span class="drag-hint">${dragHint}</span>
       </button>`;
     }).join('') || `<p class="empty">${queue ? 'Arrastra aquí lo próximo que quieres ejecutar.' : 'Sin tareas'}</p>`;
     return `<section class="column${queue ? ' queue-column' : ''}" data-column="${escapeHtml(status)}">
       <header class="column-head"><div><span class="column-kicker">${escapeHtml(hint)}</span><h2>${queue ? '<span class="queue-icon">≡</span>' : ''}${escapeHtml(label)}</h2></div><span class="column-count">${items.length}</span></header>
-      ${queue ? '<p class="queue-rule">Se ejecuta de arriba hacia abajo según prioridad.</p>' : ''}
+      ${queue ? '<p class="queue-rule">Arrastra dentro de la cola para cambiar el turno. El 1 se ejecuta primero.</p>' : ''}
       <div class="task-list" data-drop-status="${escapeHtml(status)}">${content}<p class="search-empty">Sin coincidencias en esta columna.</p></div>
     </section>`;
   }).join('');
@@ -316,7 +356,7 @@ h1{margin:6px 0 4px;font-size:32px}.muted{color:#9aaac0}.toolbar{display:flex;ga
 .next-number{display:grid;place-items:center;flex:0 0 54px;height:54px;border-radius:14px;background:#62d3be;color:#092421;font-size:20px;font-weight:900}.next-copy{min-width:0;flex:1}.next-up h2{margin:4px 0 6px;font-size:18px}.next-up p{margin:0;color:#aebed0}.empty-next{border-style:dashed;opacity:.9}.empty-next .next-number{background:#25374f;color:#8da0b9}.board{display:grid;grid-template-columns:minmax(245px,.92fr) minmax(300px,1.15fr) minmax(245px,.92fr) minmax(245px,.92fr);gap:14px;margin-top:18px;align-items:stretch}
 .column{display:flex;flex-direction:column;background:#142238;border:1px solid #2b405c;border-radius:15px;padding:13px;min-height:430px;box-shadow:0 8px 22px #0002;transition:border-color .15s,background .15s}.column-head{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;padding:3px 4px 12px;border-bottom:1px solid #2b405c}.column-head h2{font-size:17px;margin:3px 0 0}.column-kicker{display:block;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.11em;font-weight:800}.column-count{display:grid;place-items:center;min-width:28px;height:28px;border-radius:9px;background:#20344d;color:#8ce1d2;font-weight:900}.task-list{flex:1 1 auto;display:flex;flex-direction:column;min-height:330px;padding:5px 0}.column.drag-over{border-color:#73d8c6;background:#162c3f}.column.drag-over .task-list{outline:2px dashed #73d8c688;outline-offset:3px;border-radius:10px;min-height:100%}
 .queue-column{position:relative;background:linear-gradient(180deg,#241d3c,#171f36 70%);border-color:#6956a7;box-shadow:0 12px 34px #10082755}.queue-column:before{content:"";position:absolute;inset:0;border-radius:15px;pointer-events:none;background:linear-gradient(120deg,#8b5cf611,transparent 45%)}.queue-column .column-head{border-color:#56468b}.queue-column .column-kicker{color:#b8a7ef}.queue-column .column-count{background:#6d4bd2;color:#fff}.queue-icon{display:inline-grid;place-items:center;width:24px;height:24px;margin-right:7px;border-radius:8px;background:#7252d6;color:white}.queue-rule{position:relative;margin:11px 4px 6px;color:#b8acd8;font-size:11px}.queue-column.drag-over{background:linear-gradient(180deg,#322454,#1c2740);border-color:#a78bfa}
-.task{position:relative;display:block;width:100%;text-align:left;color:#e8eef8;background:#20344d;border:1px solid #38516f;border-radius:11px;padding:13px;margin:9px 0;cursor:grab;transition:transform .15s,border-color .15s,opacity .15s}.task[hidden]{display:none!important}.task:hover{border-color:#73d8c6;transform:translateY(-2px)}.task:active{cursor:grabbing}.task.dragging{opacity:.35;transform:scale(.98)}.task.search-match{border-color:#73d8c6;box-shadow:0 0 0 2px #73d8c633,0 10px 24px #0004}
+.task{position:relative;display:block;width:100%;text-align:left;color:#e8eef8;background:#20344d;border:1px solid #38516f;border-radius:11px;padding:13px;margin:9px 0;cursor:grab;transition:transform .15s,border-color .15s,opacity .15s,box-shadow .15s}.task[hidden]{display:none!important}.task:hover{border-color:#73d8c6;transform:translateY(-2px)}.task:active{cursor:grabbing}.task.dragging{opacity:.35;transform:scale(.98)}.task.drop-before{box-shadow:inset 0 3px 0 #73d8c6}.task.search-match{border-color:#73d8c6;box-shadow:0 0 0 2px #73d8c633,0 10px 24px #0004}
 .task-heading{display:grid;gap:5px;line-height:1.35}.task-id{color:#78dfcd;font-size:12px;letter-spacing:.06em}.task-title{font-size:13px}.task-meta{display:flex;gap:6px;margin-top:10px}.drag-hint{display:block;color:#71859e;font-size:10px;margin-top:10px}.queue-task{padding-left:52px;background:#292344;border-color:#594a88}.queue-task:hover{border-color:#a78bfa}.queue-next{background:linear-gradient(135deg,#3a2b64,#292344);border-color:#9a7cf0;box-shadow:0 6px 18px #150a3555}.queue-position{position:absolute;left:11px;top:13px;display:grid;place-items:center;width:31px;height:40px;border-radius:9px;background:#6d4bd2;color:#fff;font-size:16px;font-weight:900}.queue-position small{margin:0;color:#ddd6fe;font-size:7px;text-transform:uppercase;letter-spacing:.08em}
 .priority,.type,.badge{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:11px}.priority-0{background:#991b1b;color:#fee2e2}.priority-1{background:#92400e;color:#ffedd5}.priority-2{background:#164e63;color:#a5f3fc}.priority-3{background:#334155;color:#cbd5e1}.type{background:#183d42;color:#80e2d0}.type-bug{background:#be123c;color:#ffe4e6}
 .empty{color:#75869b;font-size:12px;line-height:1.5;padding:18px 8px;text-align:center;flex:1 1 auto;display:grid;place-items:center}.search-empty{display:none;color:#9aaac0;font-size:12px;line-height:1.5;padding:16px 8px;text-align:center;border:1px dashed #344a67;border-radius:11px;margin:9px 0}.column.search-no-results .search-empty{display:block}.column.search-no-results .empty{display:none}.primary,.secondary,.queue-action,.move-button{border:0;border-radius:9px;padding:10px 14px;font-weight:800;cursor:pointer}.primary,.queue-action{background:#73d8c6;color:#102131}.secondary{background:#334155;color:#e8eef8}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.status-actions{display:flex;gap:7px;flex-wrap:wrap;padding:13px;background:#111d30;border:1px solid #2c405b;border-radius:12px;margin-top:18px}.status-actions:before{content:"Mover a";width:100%;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.move-button{background:#263a55;color:#dce7f5;padding:8px 11px;font-size:11px}.move-button:hover{background:#365171}.move-button.current{display:none}
@@ -386,6 +426,12 @@ function openTask(task){
 }
 function filterTasks(){const query=search.value.trim().toLowerCase();let visible=0;cards.forEach((card)=>{const match=!query||card.dataset.search.includes(query);card.hidden=!match;card.classList.toggle('search-match',!!query&&match);if(match)visible+=1});columns.forEach((column)=>{const count=[...column.querySelectorAll('.task')].filter((card)=>!card.hidden).length;const countEl=column.querySelector('.column-count');if(countEl)countEl.textContent=count;column.classList.toggle('search-no-results',!!query&&count===0)});searchCount.textContent=query?visible+' resultado'+(visible===1?'':'s'):''}
 async function moveTask(taskId,nextStatus){actionError.textContent='';const response=await fetch('/api/tasks/status?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:taskId,status:nextStatus})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo mover la tarea');location.reload()}
+async function saveQueueOrder(order){actionError.textContent='';const response=await fetch('/api/tasks/queue-order?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({order})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo reordenar la cola');location.reload()}
+function queueCards(queueList){return [...queueList.querySelectorAll('.task:not([hidden])')]}
+function getDragAfterElement(container,y){const elements=[...container.querySelectorAll('.task:not(.dragging):not([hidden])')];return elements.reduce((closest,child)=>{const box=child.getBoundingClientRect();const offset=y-box.top-box.height/2;if(offset<0&&offset>closest.offset)return{offset,element:child};return closest},{offset:Number.NEGATIVE_INFINITY,element:null}).element}
+function buildQueueOrder(queueList,taskId,afterElement){const cards=queueCards(queueList).map((card)=>card.dataset.taskId).filter((id)=>id!==taskId);if(!afterElement){cards.push(taskId)}else{const index=cards.indexOf(afterElement.dataset.taskId);cards.splice(index<0?cards.length:index,0,taskId)}return cards}
+function clearQueueDropMarkers(){document.querySelectorAll('.task.drop-before').forEach((card)=>card.classList.remove('drop-before'))}
+function refreshQueueTurnNumbers(queueList){queueCards(queueList).forEach((card,index)=>{const badge=card.querySelector('.queue-position');if(badge){badge.lastChild.textContent=String(index+1);card.classList.toggle('queue-next',index===0)}})}
 async function saveTaskContent(){if(!selectedTask)return;actionError.textContent='';saveTask.disabled=true;saveTask.textContent='Guardando…';const response=await fetch('/api/tasks/content?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:selectedTask.id,source:sourceEditor.value})});const result=await response.json();if(!response.ok){actionError.textContent=result.error||'No se pudo guardar la tarea';saveTask.disabled=false;saveTask.textContent='Guardar cambios';return}location.reload()}
 editTask.onclick=()=>setEditMode(true);
 cancelEdit.onclick=()=>{actionError.textContent='';setEditMode(false)};
@@ -395,8 +441,8 @@ cards.forEach((button)=>button.onclick=()=>openTask(tasks[button.dataset.task]))
 document.querySelectorAll('[data-open-id]').forEach((button)=>button.onclick=()=>openTask(tasks.find((task)=>task.id===button.dataset.openId)));
 queueAction.onclick=async()=>{if(!selectedTask)return;queueAction.disabled=true;const nextStatus=selectedTask.status==='Queued'?'To Do':'Queued';try{await moveTask(selectedTask.id,nextStatus)}catch(error){actionError.textContent=error.message;queueAction.disabled=false}};
 moveButtons.forEach((button)=>button.onclick=async()=>{if(!selectedTask)return;button.disabled=true;try{await moveTask(selectedTask.id,button.dataset.moveStatus)}catch(error){actionError.textContent=error.message;button.disabled=false}});
-cards.forEach((card)=>{card.addEventListener('dragstart',(event)=>{card.classList.add('dragging');event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',card.dataset.taskId)});card.addEventListener('dragend',()=>{card.classList.remove('dragging');columns.forEach((column)=>column.classList.remove('drag-over'))})});
-columns.forEach((column)=>{column.addEventListener('dragover',(event)=>{event.preventDefault();event.dataTransfer.dropEffect='move';column.classList.add('drag-over')});column.addEventListener('dragleave',(event)=>{if(!column.contains(event.relatedTarget))column.classList.remove('drag-over')});column.addEventListener('drop',async(event)=>{event.preventDefault();column.classList.remove('drag-over');const taskId=event.dataTransfer.getData('text/plain');const task=tasks.find((item)=>item.id===taskId);const nextStatus=column.dataset.column;if(!task||task.status===nextStatus)return;try{await moveTask(taskId,nextStatus)}catch(error){actionError.textContent=error.message;modal.classList.add('open')}})});
+cards.forEach((card)=>{card.addEventListener('dragstart',(event)=>{card.classList.add('dragging');event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',card.dataset.taskId)});card.addEventListener('dragend',()=>{card.classList.remove('dragging');columns.forEach((column)=>column.classList.remove('drag-over'));clearQueueDropMarkers()})});
+columns.forEach((column)=>{const queueList=column.querySelector('.task-list');column.addEventListener('dragover',(event)=>{event.preventDefault();event.dataTransfer.dropEffect='move';column.classList.add('drag-over');if(column.dataset.column==='Queued'&&queueList){clearQueueDropMarkers();const afterElement=getDragAfterElement(queueList,event.clientY);if(afterElement)afterElement.classList.add('drop-before')}});column.addEventListener('dragleave',(event)=>{if(!column.contains(event.relatedTarget)){column.classList.remove('drag-over');if(column.dataset.column==='Queued')clearQueueDropMarkers()}});column.addEventListener('drop',async(event)=>{event.preventDefault();column.classList.remove('drag-over');clearQueueDropMarkers();const taskId=event.dataTransfer.getData('text/plain');const task=tasks.find((item)=>item.id===taskId);const nextStatus=column.dataset.column;if(!task)return;if(nextStatus==='Queued'){const afterElement=queueList?getDragAfterElement(queueList,event.clientY):null;const order=buildQueueOrder(queueList||column,taskId,afterElement);if(queueList){const dragged=queueList.querySelector('[data-task-id="'+taskId+'"]');const anchor=afterElement||null;if(dragged){if(anchor&&anchor!==dragged)queueList.insertBefore(dragged,anchor);else if(!anchor)queueList.appendChild(dragged);refreshQueueTurnNumbers(queueList)}}try{await saveQueueOrder(order)}catch(error){actionError.textContent=error.message;modal.classList.add('open')}return}if(task.status===nextStatus)return;try{await moveTask(taskId,nextStatus)}catch(error){actionError.textContent=error.message;modal.classList.add('open')}})});
 copyAction.onclick=async()=>{if(!selectedTask)return;const prompt='Atiende '+selectedTask.id+': implementa, prueba, audita con Pharos y despliega si todo pasa.';await navigator.clipboard.writeText(prompt);copyAction.textContent='Instrucción copiada';setTimeout(()=>copyAction.textContent='Copiar instrucción para Codex',1600)};
 document.querySelector('.close').onclick=()=>modal.classList.remove('open');modal.onclick=(event)=>{if(event.target===modal)modal.classList.remove('open')};document.addEventListener('keydown',(event)=>{if(event.key==='Escape')modal.classList.remove('open')});
 </script>
@@ -458,6 +504,15 @@ async function handleBoard(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  if (req.method === 'POST' && url.pathname === '/api/tasks/queue-order') {
+    try {
+      const data = await body(req);
+      const order = await updateQueueOrder(project, Array.isArray(data.order) ? data.order : []);
+      return json(res, 200, { order });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(queueBoardPage(project));
 }
@@ -467,4 +522,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, nextQueuedTask, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder };
