@@ -1,4 +1,4 @@
-const test = require('node:test'); const assert = require('node:assert/strict'); const { slugify, parseTask, sortTasksByPriority, nextQueuedTask, taskDetail, taskDetailHtml, queueBoardPage } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+const test = require('node:test'); const assert = require('node:assert/strict'); const { slugify, parseTask, sortTasksByPriority, nextQueuedTask, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, projectTasks } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
 test('slugify produces stable local ids', () => assert.equal(slugify('JurisMate IA / Tokens'), 'jurismate-ia-tokens'));
 test('parseTask reads Backlog id, status and metadata', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'ARIADNE-1 - Demo.md'); fs.writeFileSync(file, '---\nid: ARIADNE-1\nstatus: In Progress\npriority: Ultra High\ntype: bug\nordinal: 1000\n---\n'); assert.deepEqual(parseTask(file), { id: 'ARIADNE-1', title: 'Demo', status: 'In Progress', priority: 'Ultra High', type: 'bug', ordinal: 1000 }); });
 test('parseTask unfolds YAML multiline titles', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'JM-19 - Pretensiones.md'); fs.writeFileSync(file, '---\nid: JM-19\ntitle: >-\n  BUG producción · Justo no resuelve extracción\n  de pretensiones\nstatus: To Do\n---\n'); assert.equal(parseTask(file).title, 'BUG producción · Justo no resuelve extracción de pretensiones'); });
@@ -31,4 +31,44 @@ test('queue board search really hides cards and updates column state', () => {
   assert.match(html, /countEl\.textContent=count/);
   assert.match(html, /column\.classList\.toggle\('search-no-results'/);
   assert.match(html, /<p class="search-empty">Sin coincidencias en esta columna\.<\/p>/);
+});
+test('validateTaskSource requires frontmatter and stable id', () => {
+  assert.throws(() => validateTaskSource('JM-1', 'sin frontmatter'), /frontmatter/);
+  assert.throws(() => validateTaskSource('JM-1', '---\nid: JM-2\n---\n'), /no cambies el id/);
+  assert.doesNotThrow(() => validateTaskSource('JM-1', '---\nid: JM-1\n---\n\n## Description\n\nTexto'));
+});
+test('updateTaskSource writes markdown back to backlog file', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-edit-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'jm-1 - Demo.md');
+  const original = '---\nid: JM-1\ntitle: Demo\nstatus: To Do\nupdated_date: \'2026-07-28 00:00\'\n---\n\n## Description\n\nAntes';
+  fs.writeFileSync(file, original);
+  const project = { path: root };
+  const updated = updateTaskSource(project, 'JM-1', '---\nid: JM-1\ntitle: Demo editado\nstatus: To Do\nupdated_date: \'2026-07-28 00:00\'\n---\n\n## Description\n\nDespués');
+  assert.match(updated.title, /editado/);
+  const saved = fs.readFileSync(file, 'utf8');
+  assert.match(saved, /Después/);
+  assert.match(saved, /updated_date: '\d{4}-\d{2}-\d{2}/);
+  assert.equal(projectTasks(project).length, 1);
+});
+test('queue board exposes task text editor controls', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-board-edit-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-1 - Cache.md'), '---\nid: JM-1\ntitle: Cache\nstatus: To Do\npriority: Ultra High\ntype: bug\nordinal: 1\n---\n');
+  const html = queueBoardPage({ name: 'Demo', slug: 'demo', path: root });
+  assert.match(html, /id="edit-task"/);
+  assert.match(html, /id="source-editor"/);
+  assert.match(html, /\/api\/tasks\/content/);
+});
+test('queue board stretches columns for full-height drag targets', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-board-height-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-1 - Cache.md'), '---\nid: JM-1\ntitle: Cache\nstatus: To Do\npriority: Ultra High\ntype: bug\nordinal: 1\n---\n');
+  const html = queueBoardPage({ name: 'Demo', slug: 'demo', path: root });
+  assert.match(html, /align-items:stretch/);
+  assert.match(html, /\.column\{display:flex;flex-direction:column/);
+  assert.match(html, /\.task-list\{flex:1 1 auto;display:flex;flex-direction:column/);
 });

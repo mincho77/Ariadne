@@ -189,13 +189,51 @@ function runBacklog(project, args) {
   });
 }
 
+function findTask(project, taskId) {
+  return projectTasks(project).find((item) => item.id.toLowerCase() === String(taskId).toLowerCase()) || null;
+}
+
+function resolveTaskFilePath(project, task) {
+  const full = path.resolve(project.path, 'backlog', task.file);
+  const backlogRoot = path.resolve(project.path, 'backlog');
+  if (!full.startsWith(`${backlogRoot}${path.sep}`)) throw new Error('ruta de tarea inválida');
+  return full;
+}
+
+function touchUpdatedDate(source) {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  if (/^updated_date:/m.test(source)) return source.replace(/^updated_date:.*$/m, `updated_date: '${stamp}'`);
+  return source.replace(/^(---\n[\s\S]*?)(\n---)/m, `$1\nupdated_date: '${stamp}'$2`);
+}
+
+function validateTaskSource(taskId, source) {
+  const text = String(source ?? '');
+  if (!text.trim()) throw new Error('el contenido no puede estar vacío');
+  if (!/^---\n[\s\S]*?\n---/m.test(text)) throw new Error('el archivo debe conservar el frontmatter YAML (--- ... ---)');
+  const idMatch = text.match(/^id:\s*["']?([^"'\n]+)["']?\s*$/mi);
+  if (idMatch && idMatch[1].trim().toLowerCase() !== String(taskId).toLowerCase()) {
+    throw new Error('no cambies el id de la tarea en el frontmatter');
+  }
+  return text;
+}
+
 async function updateTaskStatus(project, taskId, status) {
   const allowed = new Set(['To Do', 'Queued', 'In Progress', 'Done']);
   if (!allowed.has(status)) throw new Error('estado de tarea inválido');
-  const task = projectTasks(project).find((item) => item.id.toLowerCase() === String(taskId).toLowerCase());
+  const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
   await runBacklog(project, ['task', 'edit', task.id, '--status', status, '--plain']);
   return parseTask(path.join(project.path, 'backlog', task.file));
+}
+
+function updateTaskSource(project, taskId, source) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+  const filePath = resolveTaskFilePath(project, task);
+  const next = touchUpdatedDate(validateTaskSource(task.id, source));
+  fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+  return { ...parseTask(filePath), file: task.file, source: next };
 }
 
 function isPortFree(port) {
@@ -258,7 +296,7 @@ function queueBoardPage(project) {
       <div class="task-list" data-drop-status="${escapeHtml(status)}">${content}<p class="search-empty">Sin coincidencias en esta columna.</p></div>
     </section>`;
   }).join('');
-  const taskData = JSON.stringify(tasks.map(({ id, title, status, priority, type, file, source }) => ({ id, title, status, priority, type, file, detailHtml: taskDetailHtml(source) }))).replace(/</g, '\\u003c');
+  const taskData = JSON.stringify(tasks.map(({ id, title, status, priority, type, file, source }) => ({ id, title, status, priority, type, file, detailHtml: taskDetailHtml(source), source }))).replace(/</g, '\\u003c');
   const nextBanner = queuedNext
     ? `<section class="next-up"><span class="next-number">01</span><div class="next-copy"><span class="eyebrow">SIGUIENTE A EJECUTAR</span><h2>${escapeHtml(queuedNext.id)} · ${escapeHtml(queuedNext.title)}</h2><p><span class="priority priority-${priorityRank(queuedNext.priority)}">${escapeHtml(queuedNext.priority)}</span> Está primero en la cola operativa.</p></div><button class="primary" data-open-id="${escapeHtml(queuedNext.id)}">Ver detalle</button></section>`
     : '<section class="next-up empty-next"><span class="next-number">00</span><div class="next-copy"><span class="eyebrow">COLA DE EJECUCIÓN</span><h2>La cola está vacía</h2><p>Arrastra aquí la próxima tarea que quieres autorizar.</p></div></section>';
@@ -275,14 +313,14 @@ function queueBoardPage(project) {
 h1{margin:6px 0 4px;font-size:32px}.muted{color:#9aaac0}.toolbar{display:flex;gap:12px;align-items:center;margin-top:22px}
 .search{flex:1;max-width:680px;background:#142238;border:1px solid #344a67;border-radius:12px;color:#e8eef8;padding:13px 15px;font:inherit}.refresh-button{border:1px solid #3d6a7a;background:#173b48;color:#8ce1d2;border-radius:12px;padding:12px 15px;font-weight:800;cursor:pointer}.refresh-button:hover{background:#205365}.refresh-button:disabled{opacity:.65;cursor:wait}
 .search:focus{outline:2px solid #73d8c6;outline-offset:2px}.next-up{display:flex;align-items:center;gap:18px;margin-top:22px;padding:18px 20px;background:linear-gradient(125deg,#123a3c,#172841 72%);border:1px solid #32706d;border-radius:16px;box-shadow:0 12px 30px #0003}
-.next-number{display:grid;place-items:center;flex:0 0 54px;height:54px;border-radius:14px;background:#62d3be;color:#092421;font-size:20px;font-weight:900}.next-copy{min-width:0;flex:1}.next-up h2{margin:4px 0 6px;font-size:18px}.next-up p{margin:0;color:#aebed0}.empty-next{border-style:dashed;opacity:.9}.empty-next .next-number{background:#25374f;color:#8da0b9}.board{display:grid;grid-template-columns:minmax(245px,.92fr) minmax(300px,1.15fr) minmax(245px,.92fr) minmax(245px,.92fr);gap:14px;margin-top:18px;align-items:start}
-.column{background:#142238;border:1px solid #2b405c;border-radius:15px;padding:13px;min-height:430px;box-shadow:0 8px 22px #0002;transition:border-color .15s,background .15s}.column-head{display:flex;justify-content:space-between;align-items:center;padding:3px 4px 12px;border-bottom:1px solid #2b405c}.column-head h2{font-size:17px;margin:3px 0 0}.column-kicker{display:block;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.11em;font-weight:800}.column-count{display:grid;place-items:center;min-width:28px;height:28px;border-radius:9px;background:#20344d;color:#8ce1d2;font-weight:900}.task-list{min-height:330px;padding:5px 0}.column.drag-over{border-color:#73d8c6;background:#162c3f}.column.drag-over .task-list{outline:2px dashed #73d8c688;outline-offset:3px;border-radius:10px}
+.next-number{display:grid;place-items:center;flex:0 0 54px;height:54px;border-radius:14px;background:#62d3be;color:#092421;font-size:20px;font-weight:900}.next-copy{min-width:0;flex:1}.next-up h2{margin:4px 0 6px;font-size:18px}.next-up p{margin:0;color:#aebed0}.empty-next{border-style:dashed;opacity:.9}.empty-next .next-number{background:#25374f;color:#8da0b9}.board{display:grid;grid-template-columns:minmax(245px,.92fr) minmax(300px,1.15fr) minmax(245px,.92fr) minmax(245px,.92fr);gap:14px;margin-top:18px;align-items:stretch}
+.column{display:flex;flex-direction:column;background:#142238;border:1px solid #2b405c;border-radius:15px;padding:13px;min-height:430px;box-shadow:0 8px 22px #0002;transition:border-color .15s,background .15s}.column-head{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;padding:3px 4px 12px;border-bottom:1px solid #2b405c}.column-head h2{font-size:17px;margin:3px 0 0}.column-kicker{display:block;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.11em;font-weight:800}.column-count{display:grid;place-items:center;min-width:28px;height:28px;border-radius:9px;background:#20344d;color:#8ce1d2;font-weight:900}.task-list{flex:1 1 auto;display:flex;flex-direction:column;min-height:330px;padding:5px 0}.column.drag-over{border-color:#73d8c6;background:#162c3f}.column.drag-over .task-list{outline:2px dashed #73d8c688;outline-offset:3px;border-radius:10px;min-height:100%}
 .queue-column{position:relative;background:linear-gradient(180deg,#241d3c,#171f36 70%);border-color:#6956a7;box-shadow:0 12px 34px #10082755}.queue-column:before{content:"";position:absolute;inset:0;border-radius:15px;pointer-events:none;background:linear-gradient(120deg,#8b5cf611,transparent 45%)}.queue-column .column-head{border-color:#56468b}.queue-column .column-kicker{color:#b8a7ef}.queue-column .column-count{background:#6d4bd2;color:#fff}.queue-icon{display:inline-grid;place-items:center;width:24px;height:24px;margin-right:7px;border-radius:8px;background:#7252d6;color:white}.queue-rule{position:relative;margin:11px 4px 6px;color:#b8acd8;font-size:11px}.queue-column.drag-over{background:linear-gradient(180deg,#322454,#1c2740);border-color:#a78bfa}
 .task{position:relative;display:block;width:100%;text-align:left;color:#e8eef8;background:#20344d;border:1px solid #38516f;border-radius:11px;padding:13px;margin:9px 0;cursor:grab;transition:transform .15s,border-color .15s,opacity .15s}.task[hidden]{display:none!important}.task:hover{border-color:#73d8c6;transform:translateY(-2px)}.task:active{cursor:grabbing}.task.dragging{opacity:.35;transform:scale(.98)}.task.search-match{border-color:#73d8c6;box-shadow:0 0 0 2px #73d8c633,0 10px 24px #0004}
 .task-heading{display:grid;gap:5px;line-height:1.35}.task-id{color:#78dfcd;font-size:12px;letter-spacing:.06em}.task-title{font-size:13px}.task-meta{display:flex;gap:6px;margin-top:10px}.drag-hint{display:block;color:#71859e;font-size:10px;margin-top:10px}.queue-task{padding-left:52px;background:#292344;border-color:#594a88}.queue-task:hover{border-color:#a78bfa}.queue-next{background:linear-gradient(135deg,#3a2b64,#292344);border-color:#9a7cf0;box-shadow:0 6px 18px #150a3555}.queue-position{position:absolute;left:11px;top:13px;display:grid;place-items:center;width:31px;height:40px;border-radius:9px;background:#6d4bd2;color:#fff;font-size:16px;font-weight:900}.queue-position small{margin:0;color:#ddd6fe;font-size:7px;text-transform:uppercase;letter-spacing:.08em}
 .priority,.type,.badge{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:11px}.priority-0{background:#991b1b;color:#fee2e2}.priority-1{background:#92400e;color:#ffedd5}.priority-2{background:#164e63;color:#a5f3fc}.priority-3{background:#334155;color:#cbd5e1}.type{background:#183d42;color:#80e2d0}.type-bug{background:#be123c;color:#ffe4e6}
-.empty{color:#75869b;font-size:12px;line-height:1.5;padding:18px 8px;text-align:center}.search-empty{display:none;color:#9aaac0;font-size:12px;line-height:1.5;padding:16px 8px;text-align:center;border:1px dashed #344a67;border-radius:11px;margin:9px 0}.column.search-no-results .search-empty{display:block}.column.search-no-results .empty{display:none}.primary,.secondary,.queue-action,.move-button{border:0;border-radius:9px;padding:10px 14px;font-weight:800;cursor:pointer}.primary,.queue-action{background:#73d8c6;color:#102131}.secondary{background:#334155;color:#e8eef8}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.status-actions{display:flex;gap:7px;flex-wrap:wrap;padding:13px;background:#111d30;border:1px solid #2c405b;border-radius:12px;margin-top:18px}.status-actions:before{content:"Mover a";width:100%;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.move-button{background:#263a55;color:#dce7f5;padding:8px 11px;font-size:11px}.move-button:hover{background:#365171}.move-button.current{display:none}
-.modal{display:none;position:fixed;inset:0;background:#020713d9;align-items:center;justify-content:center;padding:20px;z-index:10;backdrop-filter:blur(5px)}.modal.open{display:flex}.panel{background:#142238;border:1px solid #405674;border-radius:18px;max-width:880px;width:100%;max-height:90vh;overflow:auto;padding:0;box-shadow:0 24px 80px #0009}.panel-header{position:sticky;top:0;z-index:2;padding:24px 28px 20px;background:#142238ee;border-bottom:1px solid #2c405b;backdrop-filter:blur(12px)}.panel-header h2{margin:8px 40px 8px 0;font-size:24px;line-height:1.25}.close{position:absolute;right:20px;top:18px;background:#24364e;border:0;border-radius:10px;color:#b8c5d6;font-size:22px;width:38px;height:38px;cursor:pointer}.meta{display:flex;gap:8px;flex-wrap:wrap;margin:0}.detail-file{color:#7689a2;font-size:11px}.panel-body{padding:24px 28px 30px}.detail{display:grid;gap:13px;color:#c9d4e4;line-height:1.55;font-size:14px}.detail-section{background:#101d30;border:1px solid #293d58;border-radius:13px;padding:17px 18px}.detail-section h3{margin:0 0 11px;color:#8be1d2;font-size:12px;text-transform:uppercase;letter-spacing:.09em}.detail-section p{margin:7px 0}.detail-list{display:grid;gap:8px;list-style:none;padding:0;margin:0}.detail-list li{display:grid;grid-template-columns:20px 1fr;gap:7px;align-items:start}.check-item>span:first-child{color:#f8b84e;font-weight:900}.check-item.checked{color:#8fa3ba}.check-item.checked>span:first-child{color:#62d3be}.detail code{padding:2px 5px;border-radius:5px;background:#24344c;color:#b7f2e7}.detail-empty{color:#8da0b9}.badge{background:#183d42;color:#80e2d0}.error{color:#fecaca;min-height:18px}
+.empty{color:#75869b;font-size:12px;line-height:1.5;padding:18px 8px;text-align:center;flex:1 1 auto;display:grid;place-items:center}.search-empty{display:none;color:#9aaac0;font-size:12px;line-height:1.5;padding:16px 8px;text-align:center;border:1px dashed #344a67;border-radius:11px;margin:9px 0}.column.search-no-results .search-empty{display:block}.column.search-no-results .empty{display:none}.primary,.secondary,.queue-action,.move-button{border:0;border-radius:9px;padding:10px 14px;font-weight:800;cursor:pointer}.primary,.queue-action{background:#73d8c6;color:#102131}.secondary{background:#334155;color:#e8eef8}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.status-actions{display:flex;gap:7px;flex-wrap:wrap;padding:13px;background:#111d30;border:1px solid #2c405b;border-radius:12px;margin-top:18px}.status-actions:before{content:"Mover a";width:100%;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.move-button{background:#263a55;color:#dce7f5;padding:8px 11px;font-size:11px}.move-button:hover{background:#365171}.move-button.current{display:none}
+.modal{display:none;position:fixed;inset:0;background:#020713d9;align-items:center;justify-content:center;padding:20px;z-index:10;backdrop-filter:blur(5px)}.modal.open{display:flex}.panel{background:#142238;border:1px solid #405674;border-radius:18px;max-width:980px;width:100%;max-height:90vh;overflow:auto;padding:0;box-shadow:0 24px 80px #0009}.panel-header{position:sticky;top:0;z-index:2;padding:24px 28px 20px;background:#142238ee;border-bottom:1px solid #2c405b;backdrop-filter:blur(12px)}.panel-header h2{margin:8px 40px 8px 0;font-size:24px;line-height:1.25}.close{position:absolute;right:20px;top:18px;background:#24364e;border:0;border-radius:10px;color:#b8c5d6;font-size:22px;width:38px;height:38px;cursor:pointer}.meta{display:flex;gap:8px;flex-wrap:wrap;margin:0}.detail-file{color:#7689a2;font-size:11px}.panel-body{padding:24px 28px 30px}.detail{display:grid;gap:13px;color:#c9d4e4;line-height:1.55;font-size:14px}.detail-section{background:#101d30;border:1px solid #293d58;border-radius:13px;padding:17px 18px}.detail-section h3{margin:0 0 11px;color:#8be1d2;font-size:12px;text-transform:uppercase;letter-spacing:.09em}.detail-section p{margin:7px 0}.detail-list{display:grid;gap:8px;list-style:none;padding:0;margin:0}.detail-list li{display:grid;grid-template-columns:20px 1fr;gap:7px;align-items:start}.check-item>span:first-child{color:#f8b84e;font-weight:900}.check-item.checked{color:#8fa3ba}.check-item.checked>span:first-child{color:#62d3be}.detail code{padding:2px 5px;border-radius:5px;background:#24344c;color:#b7f2e7}.detail-empty{color:#8da0b9}.source-editor{width:100%;min-height:360px;background:#0b1524;border:1px solid #344a67;border-radius:12px;color:#e8eef8;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:14px;resize:vertical}.source-editor:focus{outline:2px solid #73d8c6;outline-offset:2px}.edit-hint{color:#8da0b9;font-size:12px;margin:0 0 10px}.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.badge{background:#183d42;color:#80e2d0}.error{color:#fecaca;min-height:18px}
 @media(max-width:1250px){.board{grid-template-columns:repeat(2,minmax(280px,1fr))}}@media(max-width:700px){body{padding:18px}.board{grid-template-columns:1fr}.toolbar,.next-up{align-items:stretch;flex-direction:column}.next-number{flex-basis:48px}.search{max-width:none}.panel-header,.panel-body{padding-left:18px;padding-right:18px}}
 </style>
 </head>
@@ -293,7 +331,7 @@ h1{margin:6px 0 4px;font-size:32px}.muted{color:#9aaac0}.toolbar{display:flex;ga
 ${nextBanner}
 <div class="toolbar"><input id="task-search" class="search" type="search" placeholder="Buscar por JM-19, título, tipo o prioridad…" aria-label="Buscar tareas"><span id="search-count" class="muted"></span><button id="refresh-board" class="refresh-button" type="button">↻ Refresh</button><span id="last-refresh" class="muted" aria-live="polite">Actualizado ahora</span></div>
 <main class="board">${cards}</main>
-<div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title"><div class="panel"><header class="panel-header"><button class="close" aria-label="Cerrar">×</button><div class="meta"><span id="detail-priority" class="badge"></span><span id="detail-type" class="badge"></span><span id="detail-status" class="badge"></span></div><h2 id="detail-title"></h2><div id="detail-file" class="detail-file"></div></header><div class="panel-body"><div id="detail-body" class="detail"></div><div id="status-actions" class="status-actions"><button class="move-button" data-move-status="To Do">To Do</button><button class="move-button" data-move-status="Queued">Queue</button><button class="move-button" data-move-status="In Progress">Doing</button><button class="move-button" data-move-status="Done">Done</button></div><p id="action-error" class="error"></p><div class="actions"><button id="queue-action" class="queue-action"></button><button id="copy-action" class="secondary">Copy instruction for Codex</button></div></div></div></div>
+<div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title"><div class="panel"><header class="panel-header"><button class="close" aria-label="Cerrar">×</button><div class="meta"><span id="detail-priority" class="badge"></span><span id="detail-type" class="badge"></span><span id="detail-status" class="badge"></span></div><h2 id="detail-title"></h2><div id="detail-file" class="detail-file"></div></header><div class="panel-body"><div id="detail-view"><div id="detail-body" class="detail"></div></div><div id="detail-edit" hidden><p class="edit-hint">Edita el Markdown completo de la tarea. Conserva el bloque YAML inicial y no cambies el <code>id</code>.</p><textarea id="source-editor" class="source-editor" spellcheck="false"></textarea><div class="edit-actions"><button id="save-task" class="primary" type="button">Guardar cambios</button><button id="cancel-edit" class="secondary" type="button">Cancelar</button></div></div><div id="status-actions" class="status-actions"><button class="move-button" data-move-status="To Do">To Do</button><button class="move-button" data-move-status="Queued">Queue</button><button class="move-button" data-move-status="In Progress">Doing</button><button class="move-button" data-move-status="Done">Done</button></div><p id="action-error" class="error"></p><div class="actions"><button id="edit-task" class="secondary" type="button">Editar texto</button><button id="queue-action" class="queue-action"></button><button id="copy-action" class="secondary">Copy instruction for Codex</button></div></div></div></div>
 <script>
 const tasks=${taskData};
 const project=${JSON.stringify(project.slug)};
@@ -303,7 +341,13 @@ const priority=document.querySelector('#detail-priority');
 const type=document.querySelector('#detail-type');
 const status=document.querySelector('#detail-status');
 const file=document.querySelector('#detail-file');
+const detailView=document.querySelector('#detail-view');
+const detailEdit=document.querySelector('#detail-edit');
 const detail=document.querySelector('#detail-body');
+const sourceEditor=document.querySelector('#source-editor');
+const editTask=document.querySelector('#edit-task');
+const saveTask=document.querySelector('#save-task');
+const cancelEdit=document.querySelector('#cancel-edit');
 const queueAction=document.querySelector('#queue-action');
 const copyAction=document.querySelector('#copy-action');
 const actionError=document.querySelector('#action-error');
@@ -315,9 +359,21 @@ const cards=[...document.querySelectorAll('.task')];
 const columns=[...document.querySelectorAll('.column')];
 const moveButtons=[...document.querySelectorAll('[data-move-status]')];
 let selectedTask=null;
+let editMode=false;
 refreshButton.onclick=()=>{refreshButton.disabled=true;refreshButton.textContent='↻ Updating…';window.location.reload()};
+function setEditMode(on){
+  editMode=on;
+  detailView.hidden=on;
+  detailEdit.hidden=!on;
+  statusActions.hidden=on;
+  queueAction.hidden=on||!(selectedTask&&(selectedTask.status==='To Do'||selectedTask.status==='Queued'));
+  copyAction.hidden=on;
+  editTask.hidden=on;
+  if(on&&selectedTask)sourceEditor.value=selectedTask.source||'';
+}
+const statusActions=document.querySelector('#status-actions');
 function openTask(task){
-  selectedTask=task;actionError.textContent='';
+  selectedTask=task;actionError.textContent='';setEditMode(false);
   title.textContent=(task.id?task.id+' · ':'')+task.title;
   priority.textContent=task.priority;priority.className='badge priority-'+({"Ultra High":0,High:1,Medium:2,Low:3}[task.priority]??3);
   type.textContent=task.type;type.className='badge type-'+task.type;
@@ -330,6 +386,10 @@ function openTask(task){
 }
 function filterTasks(){const query=search.value.trim().toLowerCase();let visible=0;cards.forEach((card)=>{const match=!query||card.dataset.search.includes(query);card.hidden=!match;card.classList.toggle('search-match',!!query&&match);if(match)visible+=1});columns.forEach((column)=>{const count=[...column.querySelectorAll('.task')].filter((card)=>!card.hidden).length;const countEl=column.querySelector('.column-count');if(countEl)countEl.textContent=count;column.classList.toggle('search-no-results',!!query&&count===0)});searchCount.textContent=query?visible+' resultado'+(visible===1?'':'s'):''}
 async function moveTask(taskId,nextStatus){actionError.textContent='';const response=await fetch('/api/tasks/status?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:taskId,status:nextStatus})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo mover la tarea');location.reload()}
+async function saveTaskContent(){if(!selectedTask)return;actionError.textContent='';saveTask.disabled=true;saveTask.textContent='Guardando…';const response=await fetch('/api/tasks/content?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:selectedTask.id,source:sourceEditor.value})});const result=await response.json();if(!response.ok){actionError.textContent=result.error||'No se pudo guardar la tarea';saveTask.disabled=false;saveTask.textContent='Guardar cambios';return}location.reload()}
+editTask.onclick=()=>setEditMode(true);
+cancelEdit.onclick=()=>{actionError.textContent='';setEditMode(false)};
+saveTask.onclick=()=>saveTaskContent().catch((error)=>{actionError.textContent=error.message;saveTask.disabled=false;saveTask.textContent='Guardar cambios'});
 search.addEventListener('input',filterTasks);
 cards.forEach((button)=>button.onclick=()=>openTask(tasks[button.dataset.task]));
 document.querySelectorAll('[data-open-id]').forEach((button)=>button.onclick=()=>openTask(tasks.find((task)=>task.id===button.dataset.openId)));
@@ -389,6 +449,15 @@ async function handleBoard(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  if (req.method === 'POST' && url.pathname === '/api/tasks/content') {
+    try {
+      const data = await body(req);
+      const updated = updateTaskSource(project, data.id, data.source);
+      return json(res, 200, updated);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(queueBoardPage(project));
 }
@@ -398,4 +467,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, nextQueuedTask, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, nextQueuedTask, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks };

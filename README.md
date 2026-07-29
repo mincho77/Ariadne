@@ -18,6 +18,8 @@ npm start
 - **Kanban JurisMate:** http://127.0.0.1:6421/?project=jurismate
 - **Kanban Ariadne:** http://127.0.0.1:6422/?project=ariadne
 
+En el detalle de cualquier tarea del Kanban, usa **Editar texto** para modificar el Markdown completo (descripción, criterios de aceptación, plan, etc.) y **Guardar cambios**. El archivo se escribe en `backlog/` del proyecto.
+
 ## Estructura
 
 ```
