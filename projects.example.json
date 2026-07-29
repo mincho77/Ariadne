@@ -6,12 +6,6 @@
     "port": 6422
   },
   {
-    "slug": "ariadne-mejoras",
-    "name": "Ariadne Mejoras",
-    "path": "/Users/TU_USUARIO/Code/Ariadne/projects/ariadne-mejoras",
-    "port": 6423
-  },
-  {
     "slug": "jurismate",
     "name": "JurisMate",
     "path": "/Users/TU_USUARIO/Code/JurisMate",

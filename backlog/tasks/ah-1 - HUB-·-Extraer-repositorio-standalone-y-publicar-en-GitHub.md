@@ -24,7 +24,7 @@ Mover el Hub, skill, planes y proyecto interno fuera de JurisMate hacia `/Users/
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Existe repo local con Hub, skill, `docs/plans` y `projects/ariadne-mejoras`.
+- [x] #1 Existe repo local con Hub, skill, `docs/plans` y backlog único (`backlog/`).
 - [x] #2 JurisMate sigue registrado en `projects.json` como proyecto externo.
 - [x] #3 El Hub arranca en `127.0.0.1:4177` y el Kanban en `6421`.
 - [x] #4 El repo está publicado en GitHub.

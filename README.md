@@ -18,9 +18,9 @@ npm start
 - **Kanban JurisMate:** http://127.0.0.1:6421/?project=jurismate
 - **Kanban Ariadne (este repo):** http://127.0.0.1:6422/?project=ariadne
 
-En el detalle de cualquier tarea del Kanban, usa **Editar texto** para modificar el Markdown completo (descripción, criterios de aceptación, plan, etc.) y **Guardar cambios**. El archivo se escribe en `backlog/` del proyecto.
+En el detalle de cualquier tarea del Kanban, usa **Editar texto** para modificar el Markdown completo y **Guardar cambios**.
 
-**Módulo de bugs:** http://127.0.0.1:6421/?project=jurismate&view=bugs (estadísticas por tema + Kanban solo bugs).
+**Módulo de bugs:** http://127.0.0.1:6421/?project=jurismate&view=bugs
 
 ## Estructura
 
@@ -31,8 +31,7 @@ Ariadne/
 ├── projects.json      # Catálogo de proyectos (rutas locales)
 ├── skills/ariadne/    # Skill y validador de ledgers
 ├── docs/plans/        # Ledgers de gobernanza
-├── backlog/           # Tareas del propio Hub (prefijo AH)
-└── projects/          # Proyectos Backlog internos de Ariadne
+└── backlog/           # Tareas del Hub (prefijo AH)
 ```
 
 ## Registrar un proyecto

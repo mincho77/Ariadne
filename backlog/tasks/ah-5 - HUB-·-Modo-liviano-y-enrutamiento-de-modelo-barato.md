@@ -11,7 +11,6 @@ labels:
 dependencies: []
 references:
   - docs/plans/ariadne-mejoras.md
-  - projects/ariadne-mejoras/backlog/tasks/am-1 - Ariadne-·-Modo-liviano-y-enrutamiento-de-modelo-barato.md
 priority: low
 type: enhancement
 ordinal: 1000

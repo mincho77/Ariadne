@@ -116,6 +116,7 @@
 | 2026-07-28 | ARLDEC-010 | Separar mejoras internas de Ariadne en un proyecto propio | El enrutamiento de modelo y ahorro de tokens es infraestructura de trabajo, no bug productivo de JurisMate | Se crea `docs/plans/ariadne-mejoras.md` y `JM-42` |
 | 2026-07-29 | ARLDEC-011 | Publicar Ariadne como repo standalone | Facilita clonar el Hub en otra máquina sin arrastrar JurisMate | Repo `mincho77/Ariadne`; backlog propio con prefijo `AH` |
 | 2026-07-29 | ARLDEC-012 | La cola operativa usa orden manual por `ordinal` | El usuario necesita decidir turnos explícitos, no solo prioridad automática | Queue deja de reordenar por prioridad al mostrar turnos |
+| 2026-07-29 | ARLDEC-013 | Unificar Ariadne y Ariadne Mejoras en un solo proyecto Hub | Dos entradas apuntaban al mismo trabajo del Hub y confundían el tablero | Un solo slug `ariadne`; backlog en la raíz; `docs/plans/ariadne-mejoras.md` permanece como ledger de gobernanza |
 
 ## Diferidos
 
@@ -190,3 +191,4 @@
 - 2026-07-29: Se habilitó repriorización manual de la cola con turnos visibles y persistencia por `ordinal` (`71f19d1`, `AH-4`).
 - 2026-07-29: Se creó backlog propio del repo (`backlog/tasks/ah-1` a `ah-5`) para ver el avance del Hub en `http://127.0.0.1:6422/?project=ariadne`.
 - 2026-07-29: Se añadió módulo de bugs por proyecto con Kanban filtrado, estadísticas por tema y tabla comparativa (`AH-6`, `bugs-board.js`, `/?project=<slug>&view=bugs`).
+- 2026-07-29: Se unificaron `Ariadne` y `Ariadne Mejoras` en un solo proyecto Hub; tareas AM-* absorbidas por backlog `AH-*` en la raíz del repo.
