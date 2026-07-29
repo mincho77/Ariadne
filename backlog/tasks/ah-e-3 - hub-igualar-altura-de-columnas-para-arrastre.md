@@ -1,5 +1,5 @@
 ---
-id: AH-3
+id: AH-E-3
 title: HUB · Igualar altura de columnas para arrastre
 status: Done
 assignee: []
@@ -10,7 +10,7 @@ labels:
   - hub
   - kanban
 dependencies:
-  - AH-1
+  - AH-E-1
 references:
   - docs/plans/ariadne-local.md
 priority: medium

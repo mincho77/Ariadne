@@ -59,7 +59,13 @@ test('mejoras board renders filtered kanban without bugs', () => {
   assert.match(html, /id="stats-toggle"/);
   assert.match(html, /id="stats-detail" class="stats-detail is-collapsed"/);
   assert.match(html, /id="refresh-board"/);
+  assert.match(html, /id="create-task"/);
+  assert.match(html, /\+ New enhancement/);
   assert.match(html, /Mejoras por área/);
+  assert.match(html, />To Do</);
+  assert.match(html, />Doing</);
+  assert.match(html, />Done</);
+  assert.doesNotMatch(html, /Por hacer|En curso|Hechas|Resueltos/);
   assert.match(html, /JM-2/);
   assert.doesNotMatch(html, /JM-1/);
   assert.match(html, /view=bugs/);

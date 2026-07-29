@@ -101,3 +101,14 @@ test('queue board stretches columns for full-height drag targets', () => {
   assert.match(html, /\.column\{display:flex;flex-direction:column/);
   assert.match(html, /\.task-list\{flex:1 1 auto;display:flex;flex-direction:column/);
 });
+
+test('createTask allocates typed bug and enhancement ids', () => {
+  const { createTask } = require('./server');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-create-task-'));
+  fs.mkdirSync(path.join(root, 'backlog', 'tasks'), { recursive: true });
+  const project = { slug: 'jurismate', name: 'JurisMate', taskCode: 'JM', path: root };
+  const bug = createTask(project, { title: 'BUG producción · Upload', type: 'bug', priority: 'Ultra High' });
+  const enhancement = createTask(project, { title: 'Mejora ranking', type: 'feature', priority: 'High' });
+  assert.equal(bug.id, 'JM-B-1');
+  assert.equal(enhancement.id, 'JM-E-1');
+});

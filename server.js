@@ -18,6 +18,9 @@ const {
   boardNavHtml,
   boardNavStyles,
 } = require('./board-chrome');
+const { boardColumns, STATUS_DISPLAY } = require('./board-columns');
+const { createTaskFile, projectTaskCode, formatTaskId, parseTypedTaskId } = require('./task-ids');
+const { normalizeProjectTaskIds } = require('./task-id-normalize');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -340,6 +343,23 @@ function updateTaskSource(project, taskId, source) {
   return { ...parseTask(filePath), file: task.file, source: next };
 }
 
+function createTask(project, options = {}) {
+  const created = createTaskFile(project, options, {
+    isBugTask,
+    projectTasks,
+    slugify,
+    findTask,
+  });
+  const parsed = parseTask(created.path);
+  return { ...parsed, file: created.file, source: created.source };
+}
+
+function ensureProjectTaskIds(project) {
+  const preview = normalizeProjectTaskIds(project, { parseTask, apply: false });
+  if (!preview.needsFix) return null;
+  return normalizeProjectTaskIds(project, { parseTask, apply: true });
+}
+
 function isPortFree(port) {
   return new Promise((resolve) => {
     const probe = net.createServer();
@@ -390,18 +410,13 @@ function boardPage(project) {
     return `<section class="column"><h2>${label}<span>${items.length}</span></h2>${items.map((task) => `<button class="task" data-task="${tasks.indexOf(task)}" data-search="${escapeHtml(`${task.id} ${task.title} ${task.priority} ${task.type} ${task.file}`.toLowerCase())}"><b><span class="task-id">${escapeHtml(task.id || 'SIN JM')}</span> ${escapeHtml(task.title)}</b><div class="task-meta"><span class="priority priority-${priorityRank(task.priority)}">${escapeHtml(task.priority)}</span><span class="type type-${escapeHtml(task.type)}">${escapeHtml(task.type)}</span></div><small>${escapeHtml(task.file)}</small></button>`).join('') || '<p class="empty">Sin tareas</p>'}</section>`;
   }).join('');
   const taskData = JSON.stringify(tasks.map(({ id, title, status, priority, type, file, source }) => ({ id, title, status, priority, type, file, detail: taskDetail(source) }))).replace(/</g, '\\u003c');
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(project.name)} · Ariadne</title><style>:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#0d172a;color:#e8eef8}body{margin:0;padding:36px;max-width:1400px;margin:auto}a{color:#73d8c6}.eyebrow{color:#73d8c6;letter-spacing:.14em;font-size:11px;font-weight:700}h1{margin:6px 0 4px;font-size:32px}.muted{color:#9aaac0}.toolbar{display:flex;gap:12px;align-items:center;margin-top:22px}.search{flex:1;max-width:560px;background:#19283c;border:1px solid #405674;border-radius:10px;color:#e8eef8;padding:12px 14px;font:inherit}.search:focus{outline:2px solid #73d8c6;outline-offset:2px}.board{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}.column{background:#19283c;border:1px solid #344963;border-radius:12px;padding:16px;min-height:300px}.column h2{font-size:16px;margin:0 0 14px;border-bottom:1px solid #344963;padding-bottom:12px}.column h2 span{float:right;color:#73d8c6}.task{display:block;width:100%;text-align:left;color:#e8eef8;background:#263950;border:1px solid #405674;border-radius:8px;padding:13px;margin:9px 0;cursor:pointer}.task:hover{border-color:#73d8c6;transform:translateY(-1px)}.task b{display:block;line-height:1.35}.task-id{color:#73d8c6;font-size:12px;font-weight:800;letter-spacing:.04em}.task small{display:block;color:#91a3b9;font-size:11px;margin-top:8px;word-break:break-all}.priority{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800}.priority-0{background:#7f1d1d;color:#fecaca}.priority-1{background:#78350f;color:#fed7aa}.priority-2{background:#164e63;color:#a5f3fc}.priority-3{background:#334155;color:#cbd5e1}.empty{color:#75869b}.modal{display:none;position:fixed;inset:0;background:#0009;align-items:center;justify-content:center;padding:20px}.modal.open{display:flex}.panel{background:#19283c;border:1px solid #405674;border-radius:14px;max-width:760px;width:100%;max-height:85vh;overflow:auto;padding:26px}.panel h2{margin:8px 0 14px}.close{float:right;background:none;border:0;color:#9aaac0;font-size:24px;cursor:pointer}.meta{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.detail{white-space:pre-wrap;color:#c9d4e4;line-height:1.5;font-size:14px}.badge{display:inline-block;background:#183d42;color:#80e2d0;border-radius:20px;padding:4px 9px;font-size:12px}.badge.priority-0{background:#991b1b;color:#fee2e2}.badge.priority-1{background:#92400e;color:#ffedd5}.badge.type-bug{background:#be123c;color:#ffe4e6}@media(max-width:800px){.board{grid-template-columns:1fr}.toolbar{align-items:stretch;flex-direction:column}.search{max-width:none}}</style></head><body><p class="eyebrow">ARIADNE · KANBAN LOCAL</p><h1>${escapeHtml(project.name)}</h1><p class="muted">${tasks.length} tareas · prioridad de atención: Ultra High → High → Medium → Low · <a href="http://${HOST}:${PORT}">Volver al Hub</a></p><div class="toolbar"><input id="task-search" class="search" type="search" placeholder="Buscar por JM-19, título, tipo o prioridad…" aria-label="Buscar tareas"><span id="search-count" class="muted"></span></div><main class="board">${cards}</main><div id="modal" class="modal" role="dialog" aria-modal="true"><div class="panel"><button class="close" aria-label="Cerrar">×</button><div class="meta"><span id="detail-priority" class="badge"></span><span id="detail-type" class="badge"></span><span id="detail-status" class="badge"></span></div><h2 id="detail-title"></h2><div id="detail-file" class="muted"></div><div id="detail-body" class="detail"></div></div></div><script>const tasks=${taskData};const modal=document.querySelector('#modal');const title=document.querySelector('#detail-title');const priority=document.querySelector('#detail-priority');const type=document.querySelector('#detail-type');const status=document.querySelector('#detail-status');const file=document.querySelector('#detail-file');const detail=document.querySelector('#detail-body');const search=document.querySelector('#task-search');const searchCount=document.querySelector('#search-count');const cards=[...document.querySelectorAll('.task')];function filterTasks(){const query=search.value.trim().toLowerCase();let visible=0;cards.forEach((card)=>{const match=!query||card.dataset.search.includes(query);card.hidden=!match;if(match)visible+=1});searchCount.textContent=query?visible+' resultado'+(visible===1?'':'s'):''}search.addEventListener('input',filterTasks);cards.forEach((button)=>button.onclick=()=>{const task=tasks[button.dataset.task];title.textContent=(task.id?task.id+' · ':'')+task.title;priority.textContent=task.priority;priority.className='badge priority-'+({"Ultra High":0,High:1,Medium:2,Low:3}[task.priority]??3);type.textContent=task.type;type.className='badge type-'+task.type;status.textContent=task.status==='In Progress'?'In Progress':task.status;file.textContent=task.file;detail.textContent=task.detail;modal.classList.add('open')});document.querySelector('.close').onclick=()=>modal.classList.remove('open');modal.onclick=(event)=>{if(event.target===modal)modal.classList.remove('open')};</script></body></html>`;
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(project.name)} · Ariadne</title><style>:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#0d172a;color:#e8eef8}body{margin:0;padding:36px;max-width:1400px;margin:auto}a{color:#73d8c6}.eyebrow{color:#73d8c6;letter-spacing:.14em;font-size:11px;font-weight:700}h1{margin:6px 0 4px;font-size:32px}.muted{color:#9aaac0}.toolbar{display:flex;gap:12px;align-items:center;margin-top:22px}.search{flex:1;max-width:560px;background:#19283c;border:1px solid #405674;border-radius:10px;color:#e8eef8;padding:12px 14px;font:inherit}.search:focus{outline:2px solid #73d8c6;outline-offset:2px}.board{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}.column{background:#19283c;border:1px solid #344963;border-radius:12px;padding:16px;min-height:300px}.column h2{font-size:16px;margin:0 0 14px;border-bottom:1px solid #344963;padding-bottom:12px}.column h2 span{float:right;color:#73d8c6}.task{display:block;width:100%;text-align:left;color:#e8eef8;background:#263950;border:1px solid #405674;border-radius:8px;padding:13px;margin:9px 0;cursor:pointer}.task:hover{border-color:#73d8c6;transform:translateY(-1px)}.task b{display:block;line-height:1.35}.task-id{color:#73d8c6;font-size:12px;font-weight:800;letter-spacing:.04em}.task small{display:block;color:#91a3b9;font-size:11px;margin-top:8px;word-break:break-all}.priority{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800}.priority-0{background:#7f1d1d;color:#fecaca}.priority-1{background:#78350f;color:#fed7aa}.priority-2{background:#164e63;color:#a5f3fc}.priority-3{background:#334155;color:#cbd5e1}.empty{color:#75869b}.modal{display:none;position:fixed;inset:0;background:#0009;align-items:center;justify-content:center;padding:20px}.modal.open{display:flex}.panel{background:#19283c;border:1px solid #405674;border-radius:14px;max-width:760px;width:100%;max-height:85vh;overflow:auto;padding:26px}.panel h2{margin:8px 0 14px}.close{float:right;background:none;border:0;color:#9aaac0;font-size:24px;cursor:pointer}.meta{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.detail{white-space:pre-wrap;color:#c9d4e4;line-height:1.5;font-size:14px}.badge{display:inline-block;background:#183d42;color:#80e2d0;border-radius:20px;padding:4px 9px;font-size:12px}.badge.priority-0{background:#991b1b;color:#fee2e2}.badge.priority-1{background:#92400e;color:#ffedd5}.badge.type-bug{background:#be123c;color:#ffe4e6}@media(max-width:800px){.board{grid-template-columns:1fr}.toolbar{align-items:stretch;flex-direction:column}.search{max-width:none}}</style></head><body><p class="eyebrow">ARIADNE · KANBAN LOCAL</p><h1>${escapeHtml(project.name)}</h1><p class="muted">${tasks.length} tareas · prioridad de atención: Ultra High → High → Medium → Low · <a href="http://${HOST}:${PORT}">Volver al Hub</a></p><div class="toolbar"><input id="task-search" class="search" type="search" placeholder="Buscar por JM-19, título, tipo o prioridad…" aria-label="Buscar tareas"><span id="search-count" class="muted"></span></div><main class="board">${cards}</main><div id="modal" class="modal" role="dialog" aria-modal="true"><div class="panel"><button class="close" aria-label="Cerrar">×</button><div class="meta"><span id="detail-priority" class="badge"></span><span id="detail-type" class="badge"></span><span id="detail-status" class="badge"></span></div><h2 id="detail-title"></h2><div id="detail-file" class="muted"></div><div id="detail-body" class="detail"></div></div></div><script>const tasks=${taskData};const modal=document.querySelector('#modal');const title=document.querySelector('#detail-title');const priority=document.querySelector('#detail-priority');const type=document.querySelector('#detail-type');const status=document.querySelector('#detail-status');const file=document.querySelector('#detail-file');const detail=document.querySelector('#detail-body');const search=document.querySelector('#task-search');const searchCount=document.querySelector('#search-count');const cards=[...document.querySelectorAll('.task')];function filterTasks(){const query=search.value.trim().toLowerCase();let visible=0;cards.forEach((card)=>{const match=!query||card.dataset.search.includes(query);card.hidden=!match;if(match)visible+=1});searchCount.textContent=query?visible+' resultado'+(visible===1?'':'s'):''}search.addEventListener('input',filterTasks);cards.forEach((button)=>button.onclick=()=>{const task=tasks[button.dataset.task];title.textContent=(task.id?task.id+' · ':'')+task.title;priority.textContent=task.priority;priority.className='badge priority-'+({"Ultra High":0,High:1,Medium:2,Low:3}[task.priority]??3);type.textContent=task.type;type.className='badge type-'+task.type;status.textContent=({"To Do":"To Do","Queued":"Queue","In Progress":"Doing","Done":"Done"}[task.status]||task.status);file.textContent=task.file;detail.textContent=task.detail;modal.classList.add('open')});document.querySelector('.close').onclick=()=>modal.classList.remove('open');modal.onclick=(event)=>{if(event.target===modal)modal.classList.remove('open')};</script></body></html>`;
 }
 
 function queueBoardPage(project) {
   const tasks = projectTasks(project);
   const queuedNext = nextQueuedTask(tasks);
-  const columns = [
-    { status: 'To Do', label: 'To Do', hint: 'Pending work' },
-    { status: 'Queued', label: 'Queue', hint: 'Execution order', queue: true },
-    { status: 'In Progress', label: 'Doing', hint: 'Active work' },
-    { status: 'Done', label: 'Done', hint: 'Completed work' },
-  ];
+  const columns = boardColumns();
   const cards = columns.map(({ status, label, hint, queue }) => {
     const items = (queue ? sortQueuedTasks : sortTasksByPriority)(tasks.filter((task) => task.status.toLowerCase() === status.toLowerCase()));
     const content = items.map((task, position) => {
@@ -460,6 +475,7 @@ ${nextBanner}
 <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title"><div class="panel"><header class="panel-header"><button class="close" aria-label="Cerrar">×</button><div class="meta"><span id="detail-priority" class="badge"></span><span id="detail-type" class="badge"></span><span id="detail-status" class="badge"></span></div><h2 id="detail-title"></h2><div id="detail-file" class="detail-file"></div></header><div class="panel-body"><div id="detail-view"><div id="detail-body" class="detail"></div></div><div id="detail-edit" hidden><p class="edit-hint">Edita el Markdown completo de la tarea. Conserva el bloque YAML inicial y no cambies el <code>id</code>.</p><textarea id="source-editor" class="source-editor" spellcheck="false"></textarea><div class="edit-actions"><button id="save-task" class="primary" type="button">Guardar cambios</button><button id="cancel-edit" class="secondary" type="button">Cancelar</button></div></div><div id="status-actions" class="status-actions"><button class="move-button" data-move-status="To Do">To Do</button><button class="move-button" data-move-status="Queued">Queue</button><button class="move-button" data-move-status="In Progress">Doing</button><button class="move-button" data-move-status="Done">Done</button></div><p id="action-error" class="error"></p><div class="actions"><button id="edit-task" class="secondary" type="button">Editar texto</button><button id="queue-action" class="queue-action"></button><button id="copy-action" class="secondary">Copy instruction for Codex</button></div></div></div></div>
 <script>
 const tasks=${taskData};
+const statusLabels=${JSON.stringify(STATUS_DISPLAY)};
 const project=${JSON.stringify(project.slug)};
 const modal=document.querySelector('#modal');
 const title=document.querySelector('#detail-title');
@@ -503,7 +519,7 @@ function openTask(task){
   title.textContent=(task.id?task.id+' · ':'')+task.title;
   priority.textContent=task.priority;priority.className='badge priority-'+({"Ultra High":0,High:1,Medium:2,Low:3}[task.priority]??3);
   type.textContent=task.type;type.className='badge type-'+task.type;
-  status.textContent=task.status;file.textContent='Fuente: '+task.file;detail.innerHTML=task.detailHtml;
+  status.textContent=statusLabels[task.status]||task.status;file.textContent='Fuente: '+task.file;detail.innerHTML=task.detailHtml;
   const queueable=task.status==='To Do'||task.status==='Queued';
   queueAction.hidden=!queueable;
   queueAction.textContent=task.status==='Queued'?'Quitar de cola':'Agregar a cola';
@@ -602,6 +618,29 @@ async function handleBoard(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  if (req.method === 'POST' && url.pathname === '/api/tasks/create') {
+    try {
+      const data = await body(req);
+      const created = createTask(project, data);
+      return json(res, 201, created);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/tasks/normalize') {
+    try {
+      const preview = normalizeProjectTaskIds(project, { parseTask, apply: false });
+      if (req.url.includes('dry=1') || url.searchParams.get('dry') === '1') {
+        return json(res, 200, preview);
+      }
+      const result = preview.needsFix
+        ? normalizeProjectTaskIds(project, { parseTask, apply: true })
+        : preview;
+      return json(res, 200, result);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/tasks/queue-order') {
     try {
       const data = await body(req);
@@ -611,7 +650,17 @@ async function handleBoard(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  if (req.method === 'POST') {
+    return json(res, 404, { error: 'not found' });
+  }
   const view = url.searchParams.get('view');
+  if (req.method === 'GET' && view) {
+    try {
+      ensureProjectTaskIds(project);
+    } catch (error) {
+      return json(res, 500, { error: error.message });
+    }
+  }
   if (!view) {
     const counts = boardCounts(project, projectTasks, isBugTask, isImprovementTask);
     const target = counts.bugsOpen > 0 ? 'bugs' : 'mejoras';
@@ -629,4 +678,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, createTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds };

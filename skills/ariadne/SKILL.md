@@ -14,6 +14,7 @@ When the repository contains a Backlog.md project (`backlog.config.yml` or `back
 - Each project keeps its own tasks, while the local Ariadne Hub catalogs project paths and opens each board.
 - Keep the Ariadne ledger in `docs/plans/<slug>.md` for decisions, risks, dependencies, evidence, and deferred work that should survive a tool change.
 - Encode binary acceptance criteria in Backlog tasks. A task cannot be `Done` without evidence recorded in the task and ledger.
+- Use typed Backlog IDs for new work: `{TASK_CODE}-B-{n}` for bugs and `{TASK_CODE}-E-{n}` for mejoras/enhancements (for example `JM-B-1`, `AH-E-2`). Keep legacy IDs readable; do not renumber existing tasks.
 - At every meaningful phase, record a checkpoint: current task ID, files changed, verification, blocker, and exact next action. If a phase fails, preserve the failed command and recovery action.
 - On resume, read the ledger first, then inspect the active Backlog task and repository state. Never restart from memory or silently skip an unfinished item.
 - Maintain one active project pointer in the ledger or Hub context; do not mix tasks from two projects in the same execution phase.

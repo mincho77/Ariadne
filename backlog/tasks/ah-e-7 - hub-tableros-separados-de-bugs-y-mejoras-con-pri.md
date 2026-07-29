@@ -1,5 +1,5 @@
 ---
-id: AH-7
+id: AH-E-7
 title: HUB · Tableros separados de bugs y mejoras con prioridad operativa
 status: Done
 assignee: []
@@ -11,7 +11,7 @@ labels:
   - bugs
   - mejoras
 dependencies:
-  - AH-6
+  - AH-E-6
 references:
   - docs/plans/ariadne-local.md
   - bugs-board.js

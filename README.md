@@ -25,6 +25,41 @@ En el detalle de cualquier tarea del Kanban, usa **Editar texto** para modificar
 
 El Hub muestra dos carriles separados por proyecto. Al abrir un tablero sin `view`, redirige a bugs si hay abiertos; si no, a mejoras. Ya no hay vista mixta por defecto.
 
+## IDs de tareas
+
+Cada proyecto usa un código de dos letras en `projects.json` (`taskCode`). Las tareas nuevas siguen:
+
+- **Bug:** `{CODE}-B-{n}` → `JM-B-1`, `AH-B-3`
+- **Mejora:** `{CODE}-E-{n}` → `JM-E-1`, `AH-E-2`
+
+Los IDs legacy o inconsistentes se corrigen con:
+
+```bash
+npm run task:normalize -- jurismate          # dry-run
+npm run task:normalize -- jurismate --apply  # escribe cambios
+npm run task:normalize -- --all --apply      # todos los proyectos
+```
+
+Al abrir un tablero, Ariadne normaliza automáticamente IDs mezclados (legacy, B/E incorrecto, código de proyecto distinto o huecos).
+
+Crear tarea localmente (sin HTTP):
+
+```bash
+npm run task:create -- jurismate --bug "BUG producción · Upload congela"
+npm run task:create -- jurismate --mejora "Mejora de ranking"
+npm run task:create -- ariadne --enhancement "HUB · Auditoría multiproyecto"
+```
+
+Desde el tablero Kanban también puedes usar **+ New bug** o **+ New enhancement**.
+
+Crear tarea vía API:
+
+```bash
+curl -s -X POST 'http://127.0.0.1:6421/api/tasks/create?project=jurismate' \
+  -H 'content-type: application/json' \
+  -d '{"title":"BUG producción · Upload congela","type":"bug","priority":"Ultra High"}'
+```
+
 ## Estructura
 
 ```

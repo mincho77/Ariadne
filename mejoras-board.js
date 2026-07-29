@@ -1,7 +1,6 @@
 const { isBugTask } = require('./bugs-board');
 const {
   QUEUE_BOARD_CSS,
-  QUEUE_COLUMN,
   queuePositionHtml,
   queueTaskClassName,
   queueColumnTitle,
@@ -11,6 +10,12 @@ const {
   renderCollapsibleStatsPanel,
   statsPanelInitScript,
 } = require('./board-stats');
+const { boardColumns } = require('./board-columns');
+const {
+  boardCreateStyles,
+  boardCreateButton,
+  boardCreateInitScript,
+} = require('./board-create');
 
 function isImprovementTask(task) {
   return !isBugTask(task);
@@ -55,8 +60,8 @@ function buildImprovementStats(items) {
 function renderImprovementStatsSummary(stats) {
   return `<section class="stats-grid stats-grid-compact" aria-label="Resumen de mejoras">
       <article class="kpi"><span>Total</span><strong>${stats.total}</strong></article>
-      <article class="kpi warn"><span>Abiertas</span><strong>${stats.open}</strong></article>
-      <article class="kpi good"><span>Hechas</span><strong>${stats.done}</strong></article>
+      <article class="kpi warn"><span>Open</span><strong>${stats.open}</strong></article>
+      <article class="kpi good"><span>Done</span><strong>${stats.done}</strong></article>
       <article class="kpi"><span>Avance</span><strong>${stats.closeRate}%</strong></article>
     </section>`;
 }
@@ -91,7 +96,7 @@ function renderImprovementStatsDetail(stats, escapeHtml) {
         <h2>Comparativo por área</h2>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Área</th><th>Total</th><th>Abiertas</th><th>Hechas</th><th>Avance</th></tr></thead>
+            <thead><tr><th>Área</th><th>Total</th><th>Open</th><th>Done</th><th>Progress</th></tr></thead>
             <tbody>${tableRows || '<tr><td colspan="5">Sin datos</td></tr>'}</tbody>
           </table>
         </div>
@@ -129,12 +134,11 @@ function mejorasBoardPage(project, helpers) {
   const stats = buildImprovementStats(items);
   const counts = boardCounts(project, projectTasks, isBugTask, isImprovementTask);
   const navHtml = boardNavHtml(project, 'mejoras', counts, helpers);
-  const columns = [
-    { status: 'To Do', label: 'Por hacer', hint: 'Mejoras pendientes' },
-    QUEUE_COLUMN,
-    { status: 'In Progress', label: 'En curso', hint: 'Trabajo activo' },
-    { status: 'Done', label: 'Hechas', hint: 'Completadas' },
-  ];
+  const columns = boardColumns({
+    todo: 'Pending improvements',
+    doing: 'Active work',
+    done: 'Completed',
+  });
   const cards = columns.map(({ status, label, hint, queue }) => {
     const sorter = queue ? sortQueuedTasks : sortTasksByPriority;
     const colItems = sorter(items.filter((task) => task.status.toLowerCase() === status.toLowerCase()));
@@ -178,6 +182,7 @@ a{color:#73d8ff}.muted{color:#9db3c7}
 ${boardNavStyles()}
 .toolbar{display:flex;gap:12px;align-items:center;margin:18px 0;flex-wrap:wrap}.search{flex:1;min-width:240px;max-width:680px;background:#0f2433;border:1px solid #2f6b8f;border-radius:12px;color:#fff;padding:13px 15px;font:inherit}
 .refresh-button{flex:0 0 auto;border:1px solid #2f6b8f;background:#123044;color:#9fe0ff;border-radius:12px;padding:12px 15px;font-weight:700;cursor:pointer;font:inherit}.refresh-button:hover{background:#1a4560}.refresh-button:disabled{opacity:.6;cursor:wait}
+${boardCreateStyles('mejoras')}
 ${statsPanelStyles('mejoras')}
 .kpi{background:#0f2433;border:1px solid #2f6b8f;border-radius:14px;padding:16px}.kpi span{display:block;color:#9db3c7;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.kpi strong{font-size:28px}.kpi.warn strong{color:#ffd59a}.kpi.good strong{color:#8de1b8}
 .analytics{display:grid;grid-template-columns:1fr 1fr;gap:14px}.panel-card{background:#0f2433;border:1px solid #2f6b8f;border-radius:15px;padding:16px}.panel-card.compact{grid-column:1/-1}.panel-card h2{margin:0 0 8px;font-size:17px}.hint{color:#7fa5bd;font-size:12px;margin:0 0 12px}
@@ -203,6 +208,7 @@ ${statsHtml}
 <div class="toolbar">
   <input id="task-search" class="search" type="search" placeholder="Buscar mejora por ID, área, título…">
   <span id="search-count" class="muted"></span>
+  ${boardCreateButton('+ New enhancement')}
   <button id="refresh-board" class="refresh-button" type="button">↻ Refrescar</button>
   <span id="last-refresh" class="muted" aria-live="polite">Actualizado ahora</span>
 </div>
@@ -218,6 +224,7 @@ const search=document.querySelector('#task-search');
 const searchCount=document.querySelector('#search-count');
 const refreshButton=document.querySelector('#refresh-board');
 ${statsPanelInitScript('ariadne-mejoras-stats-open')}
+${boardCreateInitScript({ type: 'enhancement', priority: 'Medium', labels: [], promptText: 'New enhancement title (creates CODE-E-n):', buttonLabel: '+ New enhancement' })}
 let selectedTask=null;
 refreshButton.onclick=()=>{refreshButton.disabled=true;refreshButton.textContent='↻ Actualizando…';window.location.reload()};
 function openTask(task){selectedTask=task;document.querySelector('#detail-title').textContent=(task.id?task.id+' · ':'')+task.title;document.querySelector('#detail-area').textContent='Área: '+task.area;document.querySelector('#detail-body').innerHTML=task.detailHtml;document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false;modal.classList.add('open')}

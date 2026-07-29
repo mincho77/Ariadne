@@ -1,5 +1,5 @@
 ---
-id: AH-2
+id: AH-E-2
 title: HUB · Editar texto completo de tareas desde el Kanban
 status: Done
 assignee: []
@@ -10,7 +10,7 @@ labels:
   - hub
   - kanban
 dependencies:
-  - AH-1
+  - AH-E-1
 references:
   - docs/plans/ariadne-local.md
 priority: high

@@ -1,5 +1,5 @@
 ---
-id: AH-4
+id: AH-E-4
 title: HUB · Repriorizar cola manualmente con turnos
 status: Done
 assignee: []
@@ -10,7 +10,7 @@ labels:
   - hub
   - kanban
 dependencies:
-  - AH-2
+  - AH-E-2
 references:
   - docs/plans/ariadne-local.md
 priority: high

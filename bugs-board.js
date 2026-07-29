@@ -1,6 +1,5 @@
 const {
   QUEUE_BOARD_CSS,
-  QUEUE_COLUMN,
   queuePositionHtml,
   queueTaskClassName,
   queueColumnTitle,
@@ -10,6 +9,12 @@ const {
   renderCollapsibleStatsPanel,
   statsPanelInitScript,
 } = require('./board-stats');
+const { boardColumns } = require('./board-columns');
+const {
+  boardCreateStyles,
+  boardCreateButton,
+  boardCreateInitScript,
+} = require('./board-create');
 
 const BUG_THEME_RULES = [
   ['Justo / IA', /justo|pretension|rag|ocr|presupuesto|cuant/i],
@@ -78,8 +83,8 @@ function buildBugStats(bugs) {
 function renderBugStatsSummary(stats) {
   return `<section class="stats-grid stats-grid-compact" aria-label="Resumen de bugs">
       <article class="kpi"><span>Total</span><strong>${stats.total}</strong></article>
-      <article class="kpi warn"><span>Abiertos</span><strong>${stats.open}</strong></article>
-      <article class="kpi good"><span>Resueltos</span><strong>${stats.done}</strong></article>
+      <article class="kpi warn"><span>Open</span><strong>${stats.open}</strong></article>
+      <article class="kpi good"><span>Done</span><strong>${stats.done}</strong></article>
       <article class="kpi"><span>Cierre</span><strong>${stats.closeRate}%</strong></article>
     </section>`;
 }
@@ -97,8 +102,8 @@ function renderBugStatsDetail(stats, escapeHtml) {
       <td>${escapeHtml(row.theme)}</td>
       <td>${row.total}</td>
       <td>${row.open}</td>
-      <td>${row.active}</td>
       <td>${row.queued}</td>
+      <td>${row.active}</td>
       <td>${row.done}</td>
       <td><span class="rate ${row.closeRate >= 70 ? 'good' : row.closeRate >= 40 ? 'mid' : 'low'}">${row.closeRate}%</span></td>
     </tr>`).join('');
@@ -116,7 +121,7 @@ function renderBugStatsDetail(stats, escapeHtml) {
         <h2>Comparativo por tema</h2>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Tema</th><th>Total</th><th>Por hacer</th><th>En curso</th><th>Queue</th><th>Resueltos</th><th>Cierre</th></tr></thead>
+            <thead><tr><th>Tema</th><th>Total</th><th>To Do</th><th>Queue</th><th>Doing</th><th>Done</th><th>Close</th></tr></thead>
             <tbody>${tableRows || '<tr><td colspan="7">Sin datos</td></tr>'}</tbody>
           </table>
         </div>
@@ -155,12 +160,11 @@ function bugsBoardPage(project, helpers) {
   const stats = buildBugStats(bugs);
   const counts = boardCounts(project, projectTasks, isBugTask, isImprovementTask);
   const navHtml = boardNavHtml(project, 'bugs', counts, helpers);
-  const columns = [
-    { status: 'To Do', label: 'Por hacer', hint: 'Bugs pendientes' },
-    QUEUE_COLUMN,
-    { status: 'In Progress', label: 'En curso', hint: 'Corrección activa' },
-    { status: 'Done', label: 'Resueltos', hint: 'Cerrados con evidencia' },
-  ];
+  const columns = boardColumns({
+    todo: 'Pending bugs',
+    doing: 'Active fixes',
+    done: 'Closed with evidence',
+  });
   const cards = columns.map(({ status, label, hint, queue }) => {
     const sorter = queue ? sortQueuedTasks : sortTasksByPriority;
     const items = sorter(bugs.filter((task) => task.status.toLowerCase() === status.toLowerCase()));
@@ -204,6 +208,7 @@ a{color:#ff9eb3}.muted{color:#c4a9b0}
 ${boardNavStyles()}
 .toolbar{display:flex;gap:12px;align-items:center;margin:18px 0;flex-wrap:wrap}.search{flex:1;min-width:240px;max-width:680px;background:#24161a;border:1px solid #5a3540;border-radius:12px;color:#fff;padding:13px 15px;font:inherit}
 .refresh-button{flex:0 0 auto;border:1px solid #6c3a48;background:#2a151c;color:#ffc2cf;border-radius:12px;padding:12px 15px;font-weight:700;cursor:pointer;font:inherit}.refresh-button:hover{background:#3a1a24}.refresh-button:disabled{opacity:.6;cursor:wait}
+${boardCreateStyles('bugs')}
 ${statsPanelStyles('bugs')}
 .kpi{background:#24161a;border:1px solid #5a3540;border-radius:14px;padding:16px}.kpi span{display:block;color:#c4a9b0;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.kpi strong{font-size:28px}.kpi.warn strong{color:#ffb4b4}.kpi.good strong{color:#8de1b8}
 .analytics{display:grid;grid-template-columns:1fr 1.2fr;gap:14px}.panel-card{background:#1a1114;border:1px solid #4f2f39;border-radius:15px;padding:16px}.panel-card.compact{grid-column:1/-1}.panel-card h2{margin:0 0 8px;font-size:17px}.hint{color:#b697a0;font-size:12px;margin:0 0 12px}
@@ -230,6 +235,7 @@ ${statsHtml}
 <div class="toolbar">
   <input id="task-search" class="search" type="search" placeholder="Buscar bug por ID, tema, título o prioridad…">
   <span id="search-count" class="muted"></span>
+  ${boardCreateButton('+ New bug')}
   <button id="refresh-board" class="refresh-button" type="button">↻ Refrescar</button>
   <span id="last-refresh" class="muted" aria-live="polite">Actualizado ahora</span>
 </div>
@@ -245,6 +251,7 @@ const search=document.querySelector('#task-search');
 const searchCount=document.querySelector('#search-count');
 const refreshButton=document.querySelector('#refresh-board');
 ${statsPanelInitScript('ariadne-bugs-stats-open')}
+${boardCreateInitScript({ type: 'bug', priority: 'High', labels: ['bug'], promptText: 'New bug title (creates CODE-B-n):', buttonLabel: '+ New bug' })}
 let selectedTask=null;
 refreshButton.onclick=()=>{refreshButton.disabled=true;refreshButton.textContent='↻ Actualizando…';window.location.reload()};
 function openTask(task){selectedTask=task;document.querySelector('#detail-title').textContent=(task.id?task.id+' · ':'')+task.title;document.querySelector('#detail-theme').textContent='Tema: '+task.theme;document.querySelector('#detail-body').innerHTML=task.detailHtml;document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false;modal.classList.add('open')}

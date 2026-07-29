@@ -1,5 +1,5 @@
 ---
-id: AH-6
+id: AH-E-6
 title: HUB · Módulo de bugs con Kanban y estadísticas por tema
 status: Done
 assignee: []
@@ -11,7 +11,7 @@ labels:
   - bugs
   - analytics
 dependencies:
-  - AH-1
+  - AH-E-1
 references:
   - docs/plans/ariadne-local.md
   - bugs-board.js

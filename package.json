@@ -10,7 +10,10 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "task:create": "node scripts/create-task.js",
+    "task:migrate": "node scripts/migrate-task-ids.js",
+    "task:normalize": "node scripts/migrate-task-ids.js"
   },
   "dependencies": {
     "backlog.md": "latest"

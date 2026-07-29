@@ -2,12 +2,14 @@
   {
     "slug": "ariadne",
     "name": "Ariadne",
+    "taskCode": "AH",
     "path": "/Users/TU_USUARIO/Code/Ariadne",
     "port": 6422
   },
   {
     "slug": "jurismate",
     "name": "JurisMate",
+    "taskCode": "JM",
     "path": "/Users/TU_USUARIO/Code/JurisMate",
     "port": 6421
   }
