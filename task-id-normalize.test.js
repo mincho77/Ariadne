@@ -8,6 +8,7 @@ const {
   analyzeTaskIds,
   buildNormalizationPlan,
   normalizeProjectTaskIds,
+  replaceIds,
 } = require('./task-id-normalize');
 
 function writeTask(root, dir, fileName, frontmatter) {
@@ -60,4 +61,43 @@ test('buildNormalizationPlan keeps stable order for partially migrated project',
   const plan = buildNormalizationPlan(project, entries);
   assert.equal(plan.mapping['AB-1'], 'AB-B-1');
   assert.equal(plan.mapping['AB-B-2'], 'AB-B-2');
+});
+
+test('normalizeProjectTaskIds handles duplicated old ids without path collisions', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-normalize-dup-old-id-'));
+  writeTask(root, 'tasks', 'one.md', 'id: CU-E-47\ntitle: Implementar flujo as is comentarios\nstatus: To Do\ntype: task');
+  writeTask(root, 'tasks', 'two.md', 'id: CU-E-47\ntitle: Validacion e2e abrir proyecto guardado\nstatus: To Do\ntype: task');
+  const project = { slug: 'cumplimientonormativo', name: 'Cumplimiento Normativo', path: root };
+
+  const result = normalizeProjectTaskIds(project, { parseTask, apply: true });
+  assert.equal(result.applied, 2);
+
+  const ids = fs.readdirSync(path.join(root, 'backlog', 'tasks'))
+    .map((file) => parseTask(path.join(root, 'backlog', 'tasks', file)).id)
+    .sort();
+  assert.deepEqual(ids, ['CN-E-1', 'CN-E-2']);
+});
+
+test('replaceIds ignores empty mapping keys', () => {
+  const source = 'id: CU-B-1\ntitle: Demo\n';
+  const output = replaceIds(source, {
+    '': 'CU-E-47',
+    'CU-B-1': 'CU-B-2',
+  });
+  assert.equal(output, 'id: CU-B-2\ntitle: Demo\n');
+});
+
+test('normalizeProjectTaskIds does not rewrite files with missing ids', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-normalize-missing-id-'));
+  writeTask(root, 'tasks', 'broken.md', 'title: Sin ID\nstatus: To Do\ntype: feature');
+  const project = { slug: 'cumplimientonormativo', name: 'Cumplimiento Normativo', path: root };
+  const filePath = path.join(root, 'backlog', 'tasks', 'broken.md');
+  const before = fs.readFileSync(filePath, 'utf8');
+
+  const result = normalizeProjectTaskIds(project, { parseTask, apply: true });
+  const after = fs.readFileSync(filePath, 'utf8');
+
+  assert.equal(result.applied, 0);
+  assert.ok(result.analysis.issues.some((issue) => issue.type === 'missing_id'));
+  assert.equal(after, before);
 });

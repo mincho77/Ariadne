@@ -48,13 +48,21 @@ function loadProjectTaskEntries(project, parseTask) {
 
 function replaceIds(text, mapping) {
   let next = text;
-  const ids = Object.keys(mapping).sort((a, b) => b.length - a.length);
+  const ids = Object.keys(mapping)
+    .filter((id) => String(id || '').trim().length > 0)
+    .sort((a, b) => b.length - a.length);
   for (const oldId of ids) {
     const newId = mapping[oldId];
-    if (oldId === newId) continue;
+    if (!newId || oldId === newId) continue;
     next = next.replace(new RegExp(`\\b${oldId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), newId);
   }
   return next;
+}
+
+function setTaskIdInSource(source, nextId) {
+  const text = String(source || '');
+  if (/^id:\s*.+$/mi.test(text)) return text.replace(/^id:\s*.+$/mi, `id: ${nextId}`);
+  return text.replace(/^(---\n[\s\S]*?)(\n---)/m, `$1\nid: ${nextId}$2`);
 }
 
 function expectedKind(task) {
@@ -68,6 +76,11 @@ function analyzeTaskIds(project, entries) {
 
   for (const entry of entries) {
     const { task } = entry;
+    const normalizedId = String(task.id || '').trim();
+    if (!normalizedId) {
+      issues.push({ type: 'missing_id', id: task.id, title: task.title });
+      continue;
+    }
     const parsed = parseTypedTaskId(task.id);
     const kind = expectedKind(task);
 
@@ -123,23 +136,42 @@ function buildNormalizationPlan(project, entries) {
 
   const bugs = sortEntries(entries.filter((entry) => isBugTask(entry.task)));
   const improvements = sortEntries(entries.filter((entry) => !isBugTask(entry.task)));
-  const mapping = {};
-
+  const assignments = [];
   bugs.forEach((entry, index) => {
-    mapping[entry.task.id] = formatTaskId(code, 'B', index + 1);
+    const oldId = String(entry.task.id || '').trim();
+    if (!oldId) return;
+    assignments.push({ entry, newId: formatTaskId(code, 'B', index + 1) });
   });
   improvements.forEach((entry, index) => {
-    mapping[entry.task.id] = formatTaskId(code, 'E', index + 1);
+    const oldId = String(entry.task.id || '').trim();
+    if (!oldId) return;
+    assignments.push({ entry, newId: formatTaskId(code, 'E', index + 1) });
   });
 
+  // Only keep ID replacements that are one-to-one. If an old ID appears in more than one
+  // file, global replacement is unsafe and we only rewrite each file's own id field.
+  const oldIdBuckets = new Map();
+  for (const { entry, newId } of assignments) {
+    const oldId = String(entry.task.id || '').trim();
+    if (!oldId) continue;
+    const bucket = oldIdBuckets.get(oldId) || new Set();
+    bucket.add(newId);
+    oldIdBuckets.set(oldId, bucket);
+  }
+  const mapping = {};
+  for (const [oldId, bucket] of oldIdBuckets.entries()) {
+    if (bucket.size === 1) mapping[oldId] = [...bucket][0];
+  }
+
   const analysis = analyzeTaskIds(project, entries);
-  const changes = entries.map((entry) => {
-    const newId = mapping[entry.task.id];
-    const newSource = replaceIds(entry.source, mapping);
+  const changes = assignments.map(({ entry, newId }) => {
+    const oldId = String(entry.task.id || '').trim();
+    const replaced = oldId && mapping[oldId] ? replaceIds(entry.source, mapping) : entry.source;
+    const newSource = setTaskIdInSource(replaced, newId);
     const newFile = taskFileName(newId, entry.task.title, slugifyTitle);
     const newPath = path.join(project.path, 'backlog', entry.dir, newFile);
     return {
-      oldId: entry.task.id,
+      oldId,
       newId,
       oldPath: entry.filePath,
       newPath,

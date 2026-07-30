@@ -102,11 +102,15 @@ function parseTask(file) {
   if (labelsBlock) {
     for (const match of labelsBlock[1].matchAll(/^\s+-\s+(.+)$/gm)) labels.push(match[1].trim());
   }
+  let status = match ? match[1].trim() : 'To Do';
+  if (status.toLowerCase() === 'to do' && labels.some((label) => String(label).toLowerCase() === 'queued')) {
+    status = 'Queued';
+  }
   const createdMatch = source.match(/^created_date:\s*['"]?([^'"\n]+)['"]?\s*$/mi);
   return enrichTask({
     id: idMatch ? idMatch[1].trim() : '',
     title,
-    status: match ? match[1].trim() : 'To Do',
+    status,
     priority: priorityLabel(priorityMatch ? priorityMatch[1].trim() : 'Medium'),
     type: typeMatch ? typeMatch[1].trim() : 'task',
     ordinal: Number(ordinalMatch?.[1] || Number.MAX_SAFE_INTEGER),
@@ -265,6 +269,92 @@ function validateTaskSource(taskId, source) {
   return text;
 }
 
+function rewriteTaskLabelsInSource(source, mutator) {
+  const text = String(source || '');
+  const fm = text.match(/^---\n([\s\S]*?)\n---/);
+  if (!fm) throw new Error('el archivo debe conservar el frontmatter YAML (--- ... ---)');
+
+  const lines = fm[1].split('\n');
+  const labelsStart = lines.findIndex((line) => /^labels:\s*$/.test(line));
+  let labelsEnd = labelsStart;
+  let labels = [];
+
+  if (labelsStart >= 0) {
+    labelsEnd = labelsStart + 1;
+    while (labelsEnd < lines.length && /^\s*-\s+/.test(lines[labelsEnd])) labelsEnd += 1;
+    labels = lines.slice(labelsStart + 1, labelsEnd)
+      .map((line) => line.replace(/^\s*-\s+/, '').trim())
+      .filter(Boolean);
+  }
+
+  const nextLabels = [...new Set(mutator(labels).map((item) => String(item).trim()).filter(Boolean))];
+  let nextLines = [...lines];
+
+  if (labelsStart >= 0) {
+    nextLines.splice(labelsStart, labelsEnd - labelsStart, ...(nextLabels.length ? ['labels:', ...nextLabels.map((label) => `  - ${label}`)] : []));
+  } else if (nextLabels.length) {
+    const insertAt = nextLines.findIndex((line) => /^priority:\s*/.test(line));
+    const block = ['labels:', ...nextLabels.map((label) => `  - ${label}`)];
+    if (insertAt >= 0) nextLines.splice(insertAt, 0, ...block);
+    else nextLines.push(...block);
+  }
+
+  const nextFrontmatter = `---\n${nextLines.join('\n')}\n---`;
+  return `${nextFrontmatter}${text.slice(fm[0].length)}`;
+}
+
+function setQueuedLabel(source, enabled) {
+  return rewriteTaskLabelsInSource(source, (labels) => {
+    const withoutQueued = labels.filter((label) => String(label).toLowerCase() !== 'queued');
+    if (enabled) withoutQueued.push('queued');
+    return withoutQueued;
+  });
+}
+
+function isQueuedUnsupportedError(error) {
+  return /invalid status/i.test(String(error?.message || ''));
+}
+
+function isTaskNotFoundError(error) {
+  return /task\s+.+\s+not found/i.test(String(error?.message || ''));
+}
+
+function setStatusInSource(source, status) {
+  const text = String(source || '');
+  if (/^status:\s*.+$/mi.test(text)) return text.replace(/^status:\s*.+$/mi, `status: ${status}`);
+  return text.replace(/^(---\n[\s\S]*?)(\n---)/m, `$1\nstatus: ${status}$2`);
+}
+
+function applyTaskStateFallback(project, taskId, status, queuedLabel) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+  const filePath = resolveTaskFilePath(project, task);
+  let next = setStatusInSource(task.source, status);
+  next = setQueuedLabel(next, queuedLabel);
+  next = touchUpdatedDate(next);
+  fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+  return parseTask(filePath);
+}
+
+function applyQueuedLabel(project, taskId, enabled) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+  const filePath = resolveTaskFilePath(project, task);
+  const next = touchUpdatedDate(setQueuedLabel(task.source, enabled));
+  fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+  return parseTask(filePath);
+}
+
+async function ensureTaskQueued(project, task) {
+  try {
+    await runBacklog(project, ['task', 'edit', task.id, '--status', 'Queued', '--plain']);
+    if ((task.labels || []).some((label) => String(label).toLowerCase() === 'queued')) applyQueuedLabel(project, task.id, false);
+  } catch (error) {
+    if (!isQueuedUnsupportedError(error) && !isTaskNotFoundError(error)) throw error;
+    applyTaskStateFallback(project, task.id, 'To Do', true);
+  }
+}
+
 async function applyQueueOrdinals(project, orderedIds) {
   for (let i = 0; i < orderedIds.length; i += 1) {
     await runBacklog(project, ['task', 'edit', orderedIds[i], '--ordinal', String((i + 1) * 10), '--plain']);
@@ -282,7 +372,7 @@ async function updateQueueOrder(project, orderedIds) {
     const task = findTask(project, id);
     if (!task) throw new Error(`tarea no encontrada: ${id}`);
     if (task.status.toLowerCase() !== 'queued') {
-      await runBacklog(project, ['task', 'edit', task.id, '--status', 'Queued', '--plain']);
+      await ensureTaskQueued(project, task);
     }
   }
   const queued = sortQueuedTasks(projectTasks(project).filter((task) => task.status.toLowerCase() === 'queued'));
@@ -301,7 +391,17 @@ async function updateTaskStatus(project, taskId, status) {
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
   const wasQueued = task.status.toLowerCase() === 'queued';
-  await runBacklog(project, ['task', 'edit', task.id, '--status', status, '--plain']);
+  if (status === 'Queued') {
+    await ensureTaskQueued(project, task);
+  } else {
+    try {
+      await runBacklog(project, ['task', 'edit', task.id, '--status', status, '--plain']);
+      if ((task.labels || []).some((label) => String(label).toLowerCase() === 'queued')) applyQueuedLabel(project, task.id, false);
+    } catch (error) {
+      if (!isTaskNotFoundError(error)) throw error;
+      applyTaskStateFallback(project, task.id, status, false);
+    }
+  }
   if (status === 'Queued' && !wasQueued) {
     const queued = sortQueuedTasks(projectTasks(project).filter((item) => item.status.toLowerCase() === 'queued'));
     await applyQueueOrdinals(project, [...queued.map((item) => item.id).filter((id) => id.toLowerCase() !== task.id.toLowerCase()), task.id]);
@@ -352,6 +452,8 @@ function createTask(project, options = {}) {
 function ensureProjectTaskIds(project) {
   const preview = normalizeProjectTaskIds(project, { parseTask, apply: false });
   if (!preview.needsFix) return null;
+  const hasUnsafeMissingIds = (preview.analysis?.issues || []).some((issue) => issue.type === 'missing_id');
+  if (hasUnsafeMissingIds) return { ...preview, skipped: true, reason: 'missing_id' };
   return normalizeProjectTaskIds(project, { parseTask, apply: true });
 }
 
