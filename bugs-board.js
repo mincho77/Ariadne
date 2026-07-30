@@ -15,6 +15,27 @@ const {
   boardCreateButton,
   boardCreateInitScript,
 } = require('./board-create');
+const {
+  boardDeleteStyles,
+  boardDeleteButton,
+  boardDeleteInitScript,
+} = require('./board-delete');
+const {
+  boardCardInteractionStyles,
+  boardDragHintHtml,
+  boardCardInteractionScript,
+} = require('./board-card-interaction');
+const { taskMatchesColumn } = require('./board-column-filter');
+const {
+  taskCardSubstatusHtml,
+  boardSubstatusStyles,
+  boardSubstatusPanelHtml,
+  boardSubstatusInitScript,
+} = require('./board-substatus');
+const {
+  boardTaskDetailStyles,
+  boardTaskDetailInitScript,
+} = require('./board-task-detail');
 
 const BUG_THEME_RULES = [
   ['Justo / IA', /justo|pretension|rag|ocr|presupuesto|cuant/i],
@@ -167,19 +188,20 @@ function bugsBoardPage(project, helpers) {
   });
   const cards = columns.map(({ status, label, hint, queue }) => {
     const sorter = queue ? sortQueuedTasks : sortTasksByPriority;
-    const items = sorter(bugs.filter((task) => task.status.toLowerCase() === status.toLowerCase()));
+    const items = sorter(bugs.filter((task) => taskMatchesColumn(task, status)));
     const content = items.map((task, position) => {
       const index = bugs.indexOf(task);
       const theme = inferBugTheme(task);
-      const searchable = `${task.id} ${task.title} ${task.priority} ${theme} ${task.file}`.toLowerCase();
+      const searchable = `${task.id} ${task.title} ${task.priority} ${theme} ${task.effectiveSubstatus || ''} ${task.nextAction || ''} ${task.file}`.toLowerCase();
       const queuePosition = queue ? queuePositionHtml(position) : '';
-      const dragHint = queue ? '⋮⋮ Drag to reorder queue' : '⋮⋮ Drag to change status';
-      return `<button class="${queueTaskClassName('task type-bug-card', queue, position)}" draggable="true" data-task="${index}" data-task-id="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status)}" data-search="${escapeHtml(searchable)}">
+      const dragHint = queue ? 'Drag to reorder queue' : 'Drag to change status';
+      return `<div role="button" tabindex="0" draggable="true" class="${queueTaskClassName('task type-bug-card', queue, position)}" data-task="${index}" data-task-id="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status)}" data-search="${escapeHtml(searchable)}">
         ${queuePosition}
         <span class="task-heading"><strong class="task-id">${escapeHtml(task.id)}</strong><strong class="task-title">${escapeHtml(task.title)}</strong></span>
         <span class="task-meta"><span class="theme-badge">${escapeHtml(theme)}</span><span class="priority priority-${priorityRank(task.priority)}">${escapeHtml(task.priority)}</span></span>
-        <span class="drag-hint">${dragHint}</span>
-      </button>`;
+        ${taskCardSubstatusHtml(task, escapeHtml)}
+        ${boardDragHintHtml(dragHint)}
+      </div>`;
     }).join('') || `<p class="empty">${queue ? 'Drag here to authorize the next bug.' : 'Sin bugs en esta columna'}</p>`;
     return `<section class="column${queue ? ' queue-column' : ''}" data-column="${escapeHtml(status)}">
       <header class="column-head"><div><span class="column-kicker">${escapeHtml(hint)}</span><h2>${queueColumnTitle(escapeHtml(label), queue)}</h2></div><span class="column-count">${items.length}</span></header>
@@ -187,11 +209,14 @@ function bugsBoardPage(project, helpers) {
       <div class="task-list">${content}</div>
     </section>`;
   }).join('');
-  const taskData = JSON.stringify(bugs.map(({ id, title, status, priority, type, file, source, labels }) => ({
+  const taskData = JSON.stringify(bugs.map(({ id, title, status, priority, type, file, source, labels, substatus, nextAction, effectiveSubstatus }) => ({
     id, title, status, priority, type, file,
     theme: inferBugTheme({ id, title, status, priority, type, file, labels }),
     detailHtml: taskDetailHtml(source),
     source,
+    substatus,
+    nextAction,
+    effectiveSubstatus,
   }))).replace(/</g, '\\u003c');
   const statsHtml = renderBugStatsHtml(stats, escapeHtml);
 
@@ -209,6 +234,10 @@ ${boardNavStyles()}
 .toolbar{display:flex;gap:12px;align-items:center;margin:18px 0;flex-wrap:wrap}.search{flex:1;min-width:240px;max-width:680px;background:#24161a;border:1px solid #5a3540;border-radius:12px;color:#fff;padding:13px 15px;font:inherit}
 .refresh-button{flex:0 0 auto;border:1px solid #6c3a48;background:#2a151c;color:#ffc2cf;border-radius:12px;padding:12px 15px;font-weight:700;cursor:pointer;font:inherit}.refresh-button:hover{background:#3a1a24}.refresh-button:disabled{opacity:.6;cursor:wait}
 ${boardCreateStyles('bugs')}
+${boardDeleteStyles('bugs')}
+${boardSubstatusStyles()}
+${boardTaskDetailStyles('bugs')}
+${boardCardInteractionStyles('bugs')}
 ${statsPanelStyles('bugs')}
 .kpi{background:#24161a;border:1px solid #5a3540;border-radius:14px;padding:16px}.kpi span{display:block;color:#c4a9b0;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.kpi strong{font-size:28px}.kpi.warn strong{color:#ffb4b4}.kpi.good strong{color:#8de1b8}
 .analytics{display:grid;grid-template-columns:1fr 1.2fr;gap:14px}.panel-card{background:#1a1114;border:1px solid #4f2f39;border-radius:15px;padding:16px}.panel-card.compact{grid-column:1/-1}.panel-card h2{margin:0 0 8px;font-size:17px}.hint{color:#b697a0;font-size:12px;margin:0 0 12px}
@@ -217,13 +246,13 @@ ${statsPanelStyles('bugs')}
 .rate.good{color:#8de1b8}.rate.mid{color:#ffd59a}.rate.low{color:#ffb4b4}.pill-row{display:flex;gap:8px;flex-wrap:wrap}.pill{background:#311820;color:#ffc2cf;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}
 .board{display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:14px;align-items:stretch}
 .column{display:flex;flex-direction:column;background:#1a1114;border:1px solid #4f2f39;border-radius:15px;padding:13px;min-height:360px}.column-head{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid #4f2f39}.column-kicker{display:block;color:#b697a0;font-size:10px;text-transform:uppercase;letter-spacing:.11em;font-weight:800}.column-count{background:#4a1f2a;color:#ffb4c5;border-radius:9px;min-width:28px;height:28px;display:grid;place-items:center;font-weight:900}
-.task-list{flex:1 1 auto;display:flex;flex-direction:column;min-height:240px;padding-top:6px}.task{display:block;width:100%;text-align:left;color:#fff;background:#27161b;border:1px solid #613242;border-radius:11px;padding:13px;margin:8px 0;cursor:grab}.task[hidden]{display:none!important}.task:hover{border-color:#ff8da8}.task.dragging{opacity:.35}
+.task-list{flex:1 1 auto;display:flex;flex-direction:column;min-height:240px;padding-top:6px}.task{display:block;width:100%;text-align:left;color:#fff;background:#27161b;border:1px solid #613242;border-radius:11px;padding:13px;margin:8px 0}.task[hidden]{display:none!important}.task:hover{border-color:#ff8da8}
 .task-heading{display:grid;gap:4px}.task-id{color:#ff9eb3;font-size:12px}.task-title{font-size:13px}.task-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.theme-badge{background:#4a1f2a;color:#ffc2cf;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800}
 .priority{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:11px}.priority-0{background:#991b1b;color:#fee2e2}.priority-1{background:#92400e;color:#ffedd5}.priority-2{background:#164e63;color:#a5f3fc}.priority-3{background:#334155;color:#cbd5e1}
 ${QUEUE_BOARD_CSS}
-.empty{color:#b697a0;text-align:center;padding:18px 8px;font-size:12px}.drag-hint{display:block;color:#93747c;font-size:10px;margin-top:8px}
+.empty{color:#b697a0;text-align:center;padding:18px 8px;font-size:12px}
 .modal{display:none;position:fixed;inset:0;background:#000c;align-items:center;justify-content:center;padding:20px;z-index:10}.modal.open{display:flex}.panel{background:#1a1114;border:1px solid #613242;border-radius:18px;max-width:880px;width:100%;max-height:90vh;overflow:auto;padding:24px}.close{float:right;background:#311820;border:0;color:#ffc2cf;width:36px;height:36px;border-radius:10px;font-size:22px;cursor:pointer}
-.detail{display:grid;gap:12px}.source-editor{width:100%;min-height:320px;background:#120b0d;border:1px solid #5a3540;border-radius:12px;color:#fff;font:13px/1.5 ui-monospace,Menlo,monospace;padding:14px}
+.source-editor{width:100%;min-height:320px;background:#120b0d;border:1px solid #5a3540;border-radius:12px;color:#fff;font:13px/1.5 ui-monospace,Menlo,monospace;padding:14px}
 .actions,.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.primary,.secondary{border:0;border-radius:9px;padding:10px 14px;font-weight:800;cursor:pointer}.primary{background:#ff5d7d;color:#fff}.secondary{background:#311820;color:#ffc2cf}
 @media(max-width:1100px){.analytics{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.board{grid-template-columns:repeat(2,minmax(220px,1fr))}}
 @media(max-width:700px){.stats-grid,.board{grid-template-columns:1fr}}
@@ -240,7 +269,7 @@ ${statsHtml}
   <span id="last-refresh" class="muted" aria-live="polite">Actualizado ahora</span>
 </div>
 <main class="board">${cards}</main>
-<div id="modal" class="modal"><div class="panel"><button class="close">×</button><h2 id="detail-title"></h2><p id="detail-theme" class="muted"></p><div id="detail-view"><div id="detail-body" class="detail"></div></div><div id="detail-edit" hidden><textarea id="source-editor" class="source-editor"></textarea><div class="edit-actions"><button id="save-task" class="primary">Guardar</button><button id="cancel-edit" class="secondary">Cancelar</button></div></div><p id="action-error" class="muted"></p><div class="actions"><button id="edit-task" class="secondary">Editar texto</button><button id="copy-action" class="secondary">Copiar instrucción</button></div></div></div>
+<div id="modal" class="modal"><div class="panel"><button class="close">×</button><div class="meta"><span id="detail-substatus" class="substatus"></span></div><h2 id="detail-title"></h2><p id="detail-theme" class="muted"></p><div id="detail-view">${boardSubstatusPanelHtml()}<div id="detail-body" class="detail"></div></div><div id="detail-edit" hidden><textarea id="source-editor" class="source-editor"></textarea><div class="edit-actions"><button id="save-task" class="primary">Guardar</button><button id="cancel-edit" class="secondary">Cancelar</button></div></div><p id="action-error" class="muted"></p><div class="actions"><button id="edit-task" class="secondary">Editar texto</button>${boardDeleteButton('Delete')}<button id="copy-action" class="secondary">Copiar instrucción</button></div></div></div>
 <script>
 const tasks=${taskData};
 const project=${JSON.stringify(project.slug)};
@@ -252,17 +281,22 @@ const searchCount=document.querySelector('#search-count');
 const refreshButton=document.querySelector('#refresh-board');
 ${statsPanelInitScript('ariadne-bugs-stats-open')}
 ${boardCreateInitScript({ type: 'bug', priority: 'High', labels: ['bug'], promptText: 'New bug title (creates CODE-B-n):', buttonLabel: '+ New bug' })}
+${boardDeleteInitScript({ confirmText: 'Delete {id}? This cannot be undone. Done tasks cannot be deleted.', blockBugs: false })}
+${boardCardInteractionScript()}
+const actionError=document.querySelector('#action-error');
+const detailSubstatus=document.querySelector('#detail-substatus');
+${boardSubstatusInitScript()}
+${boardTaskDetailInitScript()}
 let selectedTask=null;
 refreshButton.onclick=()=>{refreshButton.disabled=true;refreshButton.textContent='↻ Actualizando…';window.location.reload()};
-function openTask(task){selectedTask=task;document.querySelector('#detail-title').textContent=(task.id?task.id+' · ':'')+task.title;document.querySelector('#detail-theme').textContent='Tema: '+task.theme;document.querySelector('#detail-body').innerHTML=task.detailHtml;document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false;modal.classList.add('open')}
+function openTask(task){selectedTask=task;document.querySelector('#detail-title').textContent=(task.id?task.id+' · ':'')+task.title;document.querySelector('#detail-theme').textContent='Tema: '+task.theme;applyTaskDetailHtml(task);document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false;actionError.textContent='';if(detailSubstatus){detailSubstatus.textContent=task.effectiveSubstatus||'';detailSubstatus.hidden=!task.effectiveSubstatus}fillSubstatusOptions(task);if(typeof syncDeleteButton==='function')syncDeleteButton(task);modal.classList.add('open')}
 function filterTasks(){const q=search.value.trim().toLowerCase();let visible=0;cards.forEach((card)=>{const match=!q||card.dataset.search.includes(q);card.hidden=!match;if(match)visible++});columns.forEach((col)=>{const count=[...col.querySelectorAll('.task')].filter((c)=>!c.hidden).length;const el=col.querySelector('.column-count');if(el)el.textContent=count});searchCount.textContent=q?visible+' resultado'+(visible===1?'':'s'):''}
 async function moveTask(id,status){const r=await fetch('/api/tasks/status?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,status})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Error');location.reload()}
 search.addEventListener('input',filterTasks);
-cards.forEach((c)=>c.onclick=()=>openTask(tasks[c.dataset.task]));
-cards.forEach((card)=>{card.addEventListener('dragstart',(e)=>{card.classList.add('dragging');e.dataTransfer.setData('text/plain',card.dataset.taskId)});card.addEventListener('dragend',()=>card.classList.remove('dragging'))});
-columns.forEach((column)=>{column.addEventListener('dragover',(e)=>{e.preventDefault()});column.addEventListener('drop',async(e)=>{e.preventDefault();const id=e.dataTransfer.getData('text/plain');const task=tasks.find((t)=>t.id===id);const status=column.dataset.column;if(!task||task.status===status)return;try{await moveTask(id,status)}catch(err){document.querySelector('#action-error').textContent=err.message;modal.classList.add('open')}})});
-document.querySelector('#edit-task').onclick=()=>{document.querySelector('#source-editor').value=selectedTask.source||'';document.querySelector('#detail-view').hidden=true;document.querySelector('#detail-edit').hidden=false};
-document.querySelector('#cancel-edit').onclick=()=>{document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false};
+bindTaskCards(cards,tasks,openTask);
+bindColumnDropTargets(columns,tasks,async(id,status)=>{try{await moveTask(id,status)}catch(err){document.querySelector('#action-error').textContent=err.message;modal.classList.add('open')}});
+document.querySelector('#edit-task').onclick=()=>{document.querySelector('#source-editor').value=selectedTask.source||'';document.querySelector('#detail-view').hidden=true;document.querySelector('#detail-edit').hidden=false;if(typeof syncDeleteButton==='function')syncDeleteButton(null)};
+document.querySelector('#cancel-edit').onclick=()=>{document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false;if(typeof syncDeleteButton==='function')syncDeleteButton(selectedTask)};
 document.querySelector('#save-task').onclick=async()=>{const r=await fetch('/api/tasks/content?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:selectedTask.id,source:document.querySelector('#source-editor').value})});const j=await r.json();if(!r.ok){document.querySelector('#action-error').textContent=j.error;return}location.reload()};
 document.querySelector('#copy-action').onclick=async()=>{if(!selectedTask)return;await navigator.clipboard.writeText('Atiende '+selectedTask.id+': corrige el bug, prueba, audita con Pharos y despliega si pasa.');document.querySelector('#copy-action').textContent='Copiado';setTimeout(()=>document.querySelector('#copy-action').textContent='Copiar instrucción',1500)};
 document.querySelector('.close').onclick=()=>modal.classList.remove('open');modal.onclick=(e)=>{if(e.target===modal)modal.classList.remove('open')};

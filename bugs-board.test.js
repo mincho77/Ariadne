@@ -64,6 +64,7 @@ test('bugs board renders analytics and filtered kanban', () => {
   assert.match(html, /id="stats-detail" class="stats-detail is-collapsed"/);
   assert.match(html, /id="refresh-board"/);
   assert.match(html, /id="create-task"/);
+  assert.match(html, /id="delete-task"/);
   assert.match(html, /\+ New bug/);
   assert.match(html, /queue-column/);
   assert.match(html, />Queue</);
@@ -72,4 +73,7 @@ test('bugs board renders analytics and filtered kanban', () => {
   assert.match(html, />Done</);
   assert.doesNotMatch(html, /Por hacer|En curso|Resueltos|Hechas/);
   assert.doesNotMatch(html, /JM-2/);
+  assert.match(html, /id="substatus-panel"/);
+  assert.match(html, /\/api\/tasks\/substatus/);
+  assert.match(html, /check-toggle/);
 });
