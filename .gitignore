@@ -3,5 +3,6 @@ projects.json
 projects/
 tmp/
 .DS_Store
+.cursor/
 __pycache__/
 *.pyc

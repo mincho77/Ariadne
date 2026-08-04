@@ -120,9 +120,28 @@ python3 skills/ariadne/scripts/check_plan.py docs/plans/ariadne-local.md
 
 ## Arranque automático (macOS)
 
+Hub:
+
 ```bash
 cp com.ariadne.hub.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.ariadne.hub.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ariadne.hub.plist 2>/dev/null || launchctl load ~/Library/LaunchAgents/com.ariadne.hub.plist
+launchctl kickstart -k gui/$(id -u)/com.ariadne.hub
+```
+
+Cola de bugs (JurisMate, uno a uno):
+
+```bash
+cp com.ariadne.bug-queue.jurismate.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ariadne.bug-queue.jurismate.plist 2>/dev/null || launchctl load ~/Library/LaunchAgents/com.ariadne.bug-queue.jurismate.plist
+launchctl kickstart -k gui/$(id -u)/com.ariadne.bug-queue.jurismate
+```
+
+Logs: `/tmp/ariadne-hub.log`, `/tmp/ariadne-bug-queue-jurismate.log`
+
+Detener el runner viejo de JurisMate si existía:
+
+```bash
+launchctl bootout gui/$(id -u)/com.jurismate.ariadne-hub 2>/dev/null || true
 ```
 
 ## Migración desde JurisMate

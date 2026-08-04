@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ariadne.bug-queue.jurismate</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/mauriciootalvaro/.nvm/versions/node/v20.20.2/bin/node</string>
+    <string>/Users/mauriciootalvaro/Code/Ariadne/scripts/bug-queue-runner.js</string>
+    <string>jurismate</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/mauriciootalvaro/Code/Ariadne</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ARIADNE_BOARD_HOST</key>
+    <string>127.0.0.1</string>
+    <key>ARIADNE_BOARD_PORT</key>
+    <string>6421</string>
+    <key>ARIADNE_QUEUE_POLL_MS</key>
+    <string>5000</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/ariadne-bug-queue-jurismate.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/ariadne-bug-queue-jurismate-error.log</string>
+</dict>
+</plist>
