@@ -1,4 +1,4 @@
-const test = require('node:test'); const assert = require('node:assert/strict'); const { once } = require('node:events'); const { spawn } = require('node:child_process'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, updateTaskDependencies, projectTasks, buildProjectGantt, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+const test = require('node:test'); const assert = require('node:assert/strict'); const { once } = require('node:events'); const { spawn } = require('node:child_process'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, updateTaskDependencies, projectTasks, buildProjectGantt, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, updateTaskChecklist } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
 
 async function reservePort() {
   const net = require('node:net');
@@ -764,4 +764,81 @@ test('baseline API create, list, read and compare over HTTP', { timeout: 20000 }
   } finally {
     await stopProcess(child);
   }
+});
+
+test('updateTaskChecklist suggests progress without overwriting remaining or progress by default', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-checklist-suggest-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, `---
+id: AH-E-1
+title: Demo
+status: In Progress
+priority: Medium
+type: task
+progress: 25
+remaining_ia_hours: 6
+---
+
+## Acceptance Criteria
+- [ ] #1 Uno
+- [x] #2 Dos
+`);
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  const result = updateTaskChecklist(project, 'AH-E-1', 0, true);
+  assert.equal(result.suggestedProgress, 100);
+  assert.equal(result.progressApplied, false);
+  assert.equal(result.remainingPreserved, true);
+  const source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /progress: 25/);
+  assert.match(source, /remaining_ia_hours: 6/);
+});
+
+test('updateTaskChecklist can apply suggested progress when authorized', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-checklist-apply-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, `---
+id: AH-E-1
+title: Demo
+status: In Progress
+priority: Medium
+type: task
+remaining_ia_hours: 6
+---
+
+## Acceptance Criteria
+- [x] #1 Uno
+- [x] #2 Dos
+`);
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  const result = updateTaskChecklist(project, 'AH-E-1', 1, true, { applySuggestedProgress: true });
+  assert.equal(result.suggestedProgress, 100);
+  assert.equal(result.progressApplied, true);
+  assert.equal(result.remainingPreserved, true);
+  const source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /progress: 100/);
+  assert.match(source, /remaining_ia_hours: 6/);
+});
+
+test('patchProjectTask allows progress edits on In Progress tasks', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-progress-doing-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, '---\nid: AH-E-1\ntitle: Demo\nstatus: In Progress\npriority: Medium\ntype: task\nestimate_ia_hours: 10\n---\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  patchProjectTask(project, 'AH-E-1', { patch: { progress: 60, remaining_ia_hours: 4 } });
+  const source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /progress: 60/);
+  assert.match(source, /remaining_ia_hours: 4/);
+  const plan = buildProjectGantt(project, { capacity: 1, includeDone: false, startDate: '2026-08-04' });
+  const task = plan.tasks.find((item) => item.id === 'AH-E-1');
+  assert.equal(task.durationIaHours, 4);
+  assert.equal(task.progress, 60);
 });

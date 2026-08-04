@@ -83,6 +83,7 @@ const {
   listBaselines,
   compareBaselineToPlan,
 } = require('./lib/gantt/baselines');
+const { suggestProgressFromChecklist } = require('./lib/gantt/progress');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -905,14 +906,32 @@ function updateTaskDependencies(project, taskId, dependenciesInput) {
   };
 }
 
-function updateTaskChecklist(project, taskId, checkIndex, checked) {
+function updateTaskChecklist(project, taskId, checkIndex, checked, options = {}) {
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
   const filePath = resolveTaskFilePath(project, task);
   const source = fs.readFileSync(filePath, 'utf8');
-  const next = touchUpdatedDate(validateTaskSource(task.id, toggleChecklistInSource(source, checkIndex, checked)));
+  let next = touchUpdatedDate(validateTaskSource(task.id, toggleChecklistInSource(source, checkIndex, checked)));
+  const suggestedProgress = suggestProgressFromChecklist(next);
+  let progressApplied = false;
+
+  if (options.applySuggestedProgress && suggestedProgress != null) {
+    next = applyTaskPatchToSource(next, { progress: suggestedProgress });
+    progressApplied = true;
+  }
+
   fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
-  return { ...parseTask(filePath), file: task.file, source: next, detailHtml: taskDetailHtml(next) };
+
+  const remainingDeclared = getFrontmatterNumber(next, 'remaining_ia_hours');
+  return {
+    ...parseTask(filePath),
+    file: task.file,
+    source: next,
+    detailHtml: taskDetailHtml(next),
+    suggestedProgress,
+    progressApplied,
+    remainingPreserved: remainingDeclared != null,
+  };
 }
 
 function createTask(project, options = {}) {
@@ -1511,7 +1530,9 @@ async function handleBoard(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/tasks/checklist') {
     try {
       const data = await body(req);
-      const updated = updateTaskChecklist(project, data.id, Number(data.index), Boolean(data.checked));
+      const updated = updateTaskChecklist(project, data.id, Number(data.index), Boolean(data.checked), {
+        applySuggestedProgress: Boolean(data.applySuggestedProgress),
+      });
       return json(res, 200, updated);
     } catch (error) {
       return json(res, 400, { error: error.message });

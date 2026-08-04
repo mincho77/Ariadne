@@ -1,10 +1,10 @@
 ---
 id: AH-E-20
 title: GANTT · Progreso y trabajo restante
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 20:30'
 labels:
   - gantt
   - fase-3
@@ -29,6 +29,6 @@ Diferenciar progress, remaining_hours, esfuerzo ejecutado; pronóstico usa remai
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Done=100%, Doing editable
-- [ ] #2 Checklist sugiere % sin sobrescribir remaining sin autorización
+- [x] #1 Done=100%, Doing editable
+- [x] #2 Checklist sugiere % sin sobrescribir remaining sin autorización
 <!-- AC:END -->

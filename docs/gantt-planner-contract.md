@@ -28,7 +28,9 @@ Stable JSON shape returned by `GET /api/projects/{slug}/gantt`.
 
 Required: `id`, `title`, `status`, `startIaHour`, `endIaHour`, `startDate`, `endDate`, `lane`, `durationIaHours`.
 
-Optional: `dependencyLinks`, `pendingDependencies`, `canRunInParallel`, `diagnostics[]`, `violations[]`, `scheduleDrivers[]`.
+Progress (AH-E-20): `baselineEstimateIaHours`, `remainingIaHours`, `executedIaHours`, `progress`, `durationSource`. See `docs/gantt-progress.md`.
+
+Optional: `dependencyLinks`, `pendingDependencies`, `canRunInParallel`, `diagnostics[]`, `violations[]`, `scheduleDrivers[]`, `progressDeclared`, `progressSuggestedFromChecklist`, `remainingDeclared`.
 
 ## `dependencyEdges[]`
 

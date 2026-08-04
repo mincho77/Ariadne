@@ -8,7 +8,7 @@ Campos YAML opcionales en `backlog/tasks/*.md`. El **pronóstico** (`startDate`/
 |-----|----------------------|
 | Inicio efectivo | `actual_start` → `started_date` (legacy) → `planned_start` → `created_date` |
 | Fecha límite | `deadline` → `due_date` (legacy) → `target_finish` |
-| Duración | `remaining_ia_hours` (futuro AH-E-20) → `estimate_ia_hours` → `estimate_days` × IA/día |
+| Duración (pronóstico) | `remaining_ia_hours` → `progress` → sugerencia checklist → `estimate_ia_hours` → `estimate_days` × IA/día |
 
 ## Campos soportados
 
@@ -21,7 +21,7 @@ Campos YAML opcionales en `backlog/tasks/*.md`. El **pronóstico** (`startDate`/
 | `not_before` | YYYY-MM-DD | No iniciar antes |
 | `fixed` | boolean | Fechas fijas (futuro) |
 | `progress` | 0–100 | Avance declarado |
-| `remaining_ia_hours` | entero | Trabajo restante (futuro AH-E-20) |
+| `remaining_ia_hours` | entero ≥ 0 | Trabajo restante; prioridad sobre `progress` en el pronóstico |
 | `blocked`, `blocked_reason`, `blocked_until` | bool/text/date | Bloqueo temporal (futuro AH-E-21) |
 
 Legacy: `started_date`, `due_date`, `estimate_days`, `estimate_ia_hours` siguen válidos.

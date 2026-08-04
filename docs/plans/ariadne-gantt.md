@@ -54,7 +54,7 @@
 | AH-E-17 | 2 Kanban | Unificar Queue, prioridad y capacidad | hecho | AH-E-12, AH-E-13 | Política Doing→Queue→To Do | lib/gantt/capacity-policy.js; docs/gantt-capacity-policy.md; npm test 108/108 | Habilitar AH-E-19 |
 | AH-E-18 | 2 Kanban | Dependencias aplicables en Kanban | hecho | AH-E-14, AH-E-16 | Bloqueo FS visible en tablero | lib/dependency-gate.js; badges Kanban; API status | Habilitar AH-E-24 |
 | AH-E-19 | 3 Seguimiento | Líneas base del cronograma | hecho | AH-E-13, AH-E-14 | Baselines inmutables en backlog/docs/gantt/ | lib/gantt/baselines.js; docs/gantt-baselines.md; API list/create/read/compare | Habilitar AH-E-20 |
-| AH-E-20 | 3 Seguimiento | Progreso y trabajo restante | pendiente | AH-E-13, AH-E-15 | Pronóstico usa remaining | - | Tras fechas reales |
+| AH-E-20 | 3 Seguimiento | Progreso y trabajo restante | hecho | AH-E-13, AH-E-15 | Pronóstico usa remaining | lib/gantt/progress.js; docs/gantt-progress.md; npm test | Habilitar AH-E-21 |
 | AH-E-21 | 3 Seguimiento | Bloqueos temporales modelados | pendiente | AH-E-13, AH-E-16 | blocked_* y confianza baja | - | Tras restricciones |
 | AH-E-22 | 3 Seguimiento | Fases, entregables e hitos | pendiente | AH-E-11, AH-E-13 | parent_id, hitos duración 0 | - | Tras parser |
 | AH-E-23 | 4 Gantt UI | UI editable (coordinación externa) | pendiente | AH-E-14, AH-E-16, AH-E-19, AH-E-20, AH-E-22 | Contrato API + smoke Hub→63447 | UI fuera del repo; ver Evidencias | Confirmar repo frontend |
@@ -105,6 +105,8 @@
 - 2026-08-04: AH-E-17 cerrada — política Doing→Queue→To Do y capacidad por carril.
 
 - 2026-08-04: AH-E-19 cerrada — baselines inmutables, API consulta/comparación vs pronóstico.
+
+- 2026-08-04: AH-E-20 cerrada — progreso/remaining en pronóstico; checklist sugiere % sin mutar remaining.
 
 ## Evidencias
 
