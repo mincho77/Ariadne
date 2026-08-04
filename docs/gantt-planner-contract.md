@@ -44,6 +44,15 @@ Required: `fromId`, `toId`, `relation` (FS|SS|FF|SF), `fromAnchor`, `toAnchor`, 
 | `workOnSaturday` | 0 | 1 enables Saturday work |
 | `holidays` | — | CSV extra holidays |
 
+## PATCH task (partial update)
+
+`PATCH /api/projects/{slug}/tasks/{id}`
+
+- Body: campos temporales y estimaciones (ver `docs/gantt-temporal-model.md`)
+- Optimistic lock: header `If-Match: {sourceHash}` o `expectedUpdatedDate`
+- Respuesta: tarea parseada + `sourceHash` + `changes[]`
+- Conflictos: HTTP 409
+
 ## Scenario fixtures
 
 Reproducible inputs live under `tests/fixtures/gantt/scenarios/*/`. Each folder contains:
