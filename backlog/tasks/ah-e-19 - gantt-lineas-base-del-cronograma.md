@@ -1,10 +1,10 @@
 ---
 id: AH-E-19
 title: GANTT · Líneas base del cronograma
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 20:00'
 labels:
   - gantt
   - fase-3
@@ -29,7 +29,7 @@ Guardar/consultar baselines inmutables en backlog/docs/gantt/baselines/ con comp
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Baseline con nombre, fecha, autor
-- [ ] #2 No mutación silenciosa
-- [ ] #3 API de consulta y comparación
+- [x] #1 Baseline con nombre, fecha, autor
+- [x] #2 No mutación silenciosa
+- [x] #3 API de consulta y comparación
 <!-- AC:END -->

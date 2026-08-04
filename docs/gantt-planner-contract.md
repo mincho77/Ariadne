@@ -64,3 +64,16 @@ Reproducible inputs live under `tests/fixtures/gantt/scenarios/*/`. Each folder 
 - `tasks/*.md` — backlog Markdown inputs
 
 Run via `tests/gantt-scenarios.test.js`.
+
+## Baselines
+
+Immutable schedule snapshots live under `backlog/docs/gantt/baselines/`. See `docs/gantt-baselines.md`.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/projects/{slug}/gantt/baselines` | List metadata |
+| POST | `/api/projects/{slug}/gantt/baselines` | Create snapshot (`name` required); 409 if id exists |
+| GET | `/api/projects/{slug}/gantt/baselines/{id}` | Full baseline JSON |
+| GET | `/api/projects/{slug}/gantt/baselines/{id}/compare` | Delta vs current `GET …/gantt` forecast |
+
+Compare accepts the same query parameters as the Gantt endpoint (`capacity`, `startDate`, `includeDone`, …).

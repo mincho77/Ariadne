@@ -76,6 +76,13 @@ const {
   effectiveCapacityFromConfig,
   normalizeCapacityConfigField,
 } = require('./lib/gantt/capacity-policy');
+const {
+  buildBaselineFromPlan,
+  writeBaselineAtomic,
+  readBaselineFile,
+  listBaselines,
+  compareBaselineToPlan,
+} = require('./lib/gantt/baselines');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -197,6 +204,40 @@ function buildProjectGantt(project, options = {}) {
     ...options,
     aiCapacityConfig,
   }, projectTasks);
+}
+
+function ganttOptionsFromRequest(url, project) {
+  const config = readAiCapacityConfig(project);
+  const queryCapacity = url.searchParams.get('capacity');
+  const capacity = queryCapacity
+    ? Number(queryCapacity || '2')
+    : effectiveCapacityFromConfig(config, 2);
+  return {
+    capacity,
+    capacityBugs: url.searchParams.get('capacityBugs') || undefined,
+    capacityEnhancements: url.searchParams.get('capacityEnhancements') || undefined,
+    includeDone: url.searchParams.get('includeDone') !== '0',
+    iaHoursPerDay: Number(url.searchParams.get('iaHoursPerDay') || '8'),
+    startDate: url.searchParams.get('startDate') || '',
+    holidays: (url.searchParams.get('holidays') || '').split(',').map((item) => item.trim()).filter(Boolean),
+    workOnSaturday: url.searchParams.get('workOnSaturday') === '1',
+  };
+}
+
+function createProjectBaseline(project, payload = {}, ganttOptions = {}) {
+  const plan = buildProjectGantt(project, ganttOptions);
+  const baseline = buildBaselineFromPlan(plan, {
+    name: payload.name,
+    author: payload.author,
+    id: payload.id,
+  });
+  return writeBaselineAtomic(project, baseline);
+}
+
+function compareProjectBaseline(project, baselineId, ganttOptions = {}) {
+  const baseline = readBaselineFile(project, baselineId);
+  const plan = buildProjectGantt(project, ganttOptions);
+  return compareBaselineToPlan(baseline, plan);
 }
 
 
@@ -1233,24 +1274,57 @@ async function handle(req, res) {
   if (req.method === 'GET' && gantt) {
     const project = readCatalog().find((item) => item.slug === gantt[1]);
     if (!project) return json(res, 404, { error: 'project not found' });
-    const config = readAiCapacityConfig(project);
-    const queryCapacity = url.searchParams.get('capacity');
-    const capacity = queryCapacity
-      ? Number(queryCapacity || '2')
-      : effectiveCapacityFromConfig(config, 2);
-    const includeDone = url.searchParams.get('includeDone') !== '0';
-    const iaHoursPerDay = Number(url.searchParams.get('iaHoursPerDay') || '8');
-    const startDate = url.searchParams.get('startDate') || '';
-    const holidays = (url.searchParams.get('holidays') || '').split(',').map((item) => item.trim()).filter(Boolean);
-    const workOnSaturday = url.searchParams.get('workOnSaturday') === '1';
-    return json(res, 200, buildProjectGantt(project, {
-      capacity,
-      includeDone,
-      iaHoursPerDay,
-      startDate,
-      holidays,
-      workOnSaturday,
-    }));
+    return json(res, 200, buildProjectGantt(project, ganttOptionsFromRequest(url, project)));
+  }
+  const ganttBaselines = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/baselines$/);
+  if (ganttBaselines) {
+    const project = readCatalog().find((item) => item.slug === ganttBaselines[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (req.method === 'GET') {
+      return json(res, 200, { project: project.slug, baselines: listBaselines(project) });
+    }
+    if (req.method === 'POST') {
+      try {
+        const data = await body(req);
+        const baseline = createProjectBaseline(
+          project,
+          data || {},
+          { ...ganttOptionsFromRequest(url, project), ...(data?.ganttOptions || {}) },
+        );
+        return json(res, 201, { project: project.slug, baseline });
+      } catch (error) {
+        const statusCode = /ya existe|inmutable/i.test(error.message) ? 409 : 400;
+        return json(res, statusCode, { error: error.message });
+      }
+    }
+  }
+  const ganttBaselineCompare = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/baselines\/([^/]+)\/compare$/);
+  if (req.method === 'GET' && ganttBaselineCompare) {
+    const project = readCatalog().find((item) => item.slug === ganttBaselineCompare[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const report = compareProjectBaseline(
+        project,
+        decodeURIComponent(ganttBaselineCompare[2]),
+        ganttOptionsFromRequest(url, project),
+      );
+      return json(res, 200, report);
+    } catch (error) {
+      const statusCode = /no encontrada/i.test(error.message) ? 404 : 400;
+      return json(res, statusCode, { error: error.message });
+    }
+  }
+  const ganttBaselineOne = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/baselines\/([^/]+)$/);
+  if (req.method === 'GET' && ganttBaselineOne) {
+    const project = readCatalog().find((item) => item.slug === ganttBaselineOne[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const baseline = readBaselineFile(project, decodeURIComponent(ganttBaselineOne[2]));
+      return json(res, 200, { project: project.slug, baseline });
+    } catch (error) {
+      const statusCode = /no encontrada/i.test(error.message) ? 404 : 400;
+      return json(res, statusCode, { error: error.message });
+    }
   }
   const aiCapacity = url.pathname.match(/^\/api\/projects\/([^/]+)\/ai-capacity-config$/);
   if (req.method === 'GET' && aiCapacity) {
@@ -1388,7 +1462,7 @@ async function handle(req, res) {
 
 async function handleBoard(req, res) {
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PATCH,OPTIONS');
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -1555,4 +1629,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask, createProjectBaseline, compareProjectBaseline, listBaselines, readBaselineFile };

@@ -95,6 +95,25 @@ function createPatchHttpSandbox(prefix = 'ariadne-http-patch-') {
   return { sandbox, projectRoot, tasksDir, catalogPath };
 }
 
+function createBaselineHttpSandbox(prefix = 'ariadne-http-baseline-') {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const projectRoot = path.join(sandbox, 'project');
+  const tasksDir = path.join(projectRoot, 'backlog', 'tasks');
+  fs.mkdirSync(tasksDir, { recursive: true });
+  fs.writeFileSync(path.join(tasksDir, 'ah-e-1 - One.md'), '---\nid: AH-E-1\ntitle: One\nstatus: To Do\npriority: Medium\ntype: task\nestimate_days: 2\n---\n');
+  fs.writeFileSync(path.join(tasksDir, 'ah-e-2 - Two.md'), '---\nid: AH-E-2\ntitle: Two\nstatus: To Do\npriority: Medium\ntype: task\nestimate_days: 2\n---\n');
+  const catalogPath = path.join(sandbox, 'projects.json');
+  fs.writeFileSync(catalogPath, `${JSON.stringify([
+    {
+      slug: 'demo-http',
+      name: 'Demo HTTP',
+      path: projectRoot,
+      port: 6521,
+    },
+  ], null, 2)}\n`);
+  return { sandbox, projectRoot, tasksDir, catalogPath };
+}
+
 async function startHttpServerForTest(catalogPath) {
   const port = await reservePort();
   const child = spawn(process.execPath, ['server.js'], {
@@ -696,4 +715,53 @@ test('evaluateDependencyGate is exposed from server helpers', () => {
   const tasks = projectTasks(project);
   const gate = evaluateDependencyGate(tasks[1], tasks, { policy: 'strict' });
   assert.equal(gate.blocked, true);
+});
+
+test('baseline API create, list, read and compare over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createBaselineHttpSandbox('ariadne-http-baseline-crud-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+  const ganttQuery = 'includeDone=0&iaHoursPerDay=8&startDate=2026-08-04&capacity=1';
+  const baselineId = 'bl-20260804-http-test-deadbeef';
+
+  try {
+    const create = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines?${ganttQuery}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'HTTP baseline', author: 'test-runner', id: baselineId }),
+    });
+    assert.equal(create.status, 201);
+    const created = await create.json();
+    assert.equal(created.baseline.id, baselineId);
+    assert.equal(created.baseline.name, 'HTTP baseline');
+    assert.equal(created.baseline.author, 'test-runner');
+    assert.ok(created.baseline.tasks.length >= 2);
+
+    const list = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines`);
+    assert.equal(list.status, 200);
+    const listBody = await list.json();
+    assert.ok(listBody.baselines.some((row) => row.id === baselineId));
+
+    const one = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines/${baselineId}`);
+    assert.equal(one.status, 200);
+    const oneBody = await one.json();
+    assert.equal(oneBody.baseline.id, baselineId);
+
+    const compare = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines/${baselineId}/compare?${ganttQuery}`);
+    assert.equal(compare.status, 200);
+    const compareBody = await compare.json();
+    assert.equal(compareBody.baselineId, baselineId);
+    assert.ok(Array.isArray(compareBody.tasks));
+    assert.equal(compareBody.summary.unchangedTasks, compareBody.tasks.filter((row) => row.change === 'unchanged').length);
+
+    const duplicate = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines?${ganttQuery}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Duplicate', author: 'test-runner', id: baselineId }),
+    });
+    assert.equal(duplicate.status, 409);
+    const duplicateBody = await duplicate.json();
+    assert.match(String(duplicateBody.error || ''), /inmutable|ya existe/i);
+  } finally {
+    await stopProcess(child);
+  }
 });
