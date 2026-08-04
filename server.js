@@ -49,11 +49,55 @@ const {
   boardTaskDetailStyles,
   boardTaskDetailInitScript,
 } = require('./board-task-detail');
+const {
+  splitTaskDocument,
+  getFrontmatterField,
+  getFrontmatterList,
+  getFrontmatterNumber,
+  upsertFrontmatterScalar,
+  upsertFrontmatterList,
+} = require('./lib/task-markdown');
+const { priorityLabel, priorityRank } = require('./lib/task-priority');
+const {
+  normalizeTaskPatch,
+  applyTaskPatchToSource,
+  buildKanbanTemporalPatch,
+  computeSourceHash,
+} = require('./lib/task-temporal');
+const {
+  buildProjectGantt: buildGanttPlan,
+  parseDependencySpec,
+  toPlanningTask,
+} = require('./lib/gantt');
+const { evaluateDependencyGate, assertCanStartWork, normalizeGatePolicy } = require('./lib/dependency-gate');
+const { taskDependencyGateStyles, taskDependencyGateHtml } = require('./board-dependency-gate');
+const {
+  normalizeAiOperators,
+  effectiveCapacityFromConfig,
+  normalizeCapacityConfigField,
+} = require('./lib/gantt/capacity-policy');
+const {
+  buildBaselineFromPlan,
+  writeBaselineAtomic,
+  readBaselineFile,
+  listBaselines,
+  compareBaselineToPlan,
+} = require('./lib/gantt/baselines');
+const { suggestProgressFromChecklist } = require('./lib/gantt/progress');
+const {
+  buildHubGanttUiConfig,
+  buildGanttLaunchUrl,
+} = require('./lib/gantt/ui-contract');
+const { buildHubGanttMetrics } = require('./lib/gantt/hub-metrics');
+const { readResourceConfig } = require('./lib/gantt/resources');
+const { runWhatIfScenario } = require('./lib/gantt/what-if');
+const { buildGanttPortfolio } = require('./lib/gantt/portfolio');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
 const BOARD_PORT = Number(process.env.ARIADNE_BOARD_PORT || 6421);
 const GANTT_BASE_URL = String(process.env.ARIADNE_GANTT_BASE_URL || 'http://localhost:63447/');
+const DEPENDENCY_GATE_POLICY = normalizeGatePolicy(process.env.ARIADNE_DEPENDENCY_GATE_POLICY);
 const HOST = '127.0.0.1';
 const CATALOG = path.resolve(process.env.ARIADNE_CATALOG_PATH || path.join(ROOT, 'projects.json'));
 const BACKLOG = path.join(ROOT, 'node_modules', '.bin', 'backlog');
@@ -80,55 +124,35 @@ function uniqueSlug(name, projects) {
   return slug;
 }
 
-function parseTask(file) {
-  const source = fs.readFileSync(file, 'utf8');
-  const idMatch = source.match(/^id:\s*["']?([^"'\n]+)["']?\s*$/mi);
-  const match = source.match(/^status:\s*["']?([^"'\n]+)["']?\s*$/mi);
-  const priorityMatch = source.match(/^priority:\s*["']?([^"'\n]+)["']?\s*$/mi);
-  const typeMatch = source.match(/^type:\s*["']?([^"'\n]+)["']?\s*$/mi);
-  const ordinalMatch = source.match(/^ordinal:\s*(\d+)\s*$/mi);
-  const titleMatch = source.match(/^title:\s*(?:(?:["'])(.*?)["']|(.+))\s*$/mi);
-  let title = titleMatch ? (titleMatch[1] ?? titleMatch[2] ?? '').trim() : '';
-  if (/^(?:>-|>\-|\||\|-)$/.test(title)) {
-    const titleLine = source.slice(titleMatch.index + titleMatch[0].length);
-    const continuation = titleLine.split('\n').slice(0, 8)
-      .filter((line) => /^\s{2,}\S/.test(line))
-      .map((line) => line.trim())
-      .join(title === '|' || title === '|-' ? '\n' : ' ')
-      .trim();
-    title = continuation;
-  }
+function parseTask(file, sourceOverride) {
+  const source = sourceOverride ?? fs.readFileSync(file, 'utf8');
+  const { frontmatter } = splitTaskDocument(source);
+  const fm = frontmatter && typeof frontmatter === 'object' ? frontmatter : {};
+  let title = typeof fm.title === 'string' ? fm.title.trim() : '';
+  if (!title && fm.title != null) title = String(fm.title).trim();
   if (!title) title = path.basename(file).replace(/^[^-]+-\d+\s*-\s*/, '').replace(/\.md$/, '').replace(/-/g, ' ');
-  const labels = [];
-  const labelsBlock = source.match(/^labels:\s*\n((?:\s+-\s+.+\n?)*)/m);
-  if (labelsBlock) {
-    for (const match of labelsBlock[1].matchAll(/^\s+-\s+(.+)$/gm)) labels.push(match[1].trim());
-  }
-  let status = match ? match[1].trim() : 'To Do';
+  const labels = Array.isArray(fm.labels) ? fm.labels.map((label) => String(label).trim()).filter(Boolean) : [];
+  let status = fm.status ? String(fm.status).trim() : 'To Do';
   if (status.toLowerCase() === 'to do' && labels.some((label) => String(label).toLowerCase() === 'queued')) {
     status = 'Queued';
   }
-  const createdMatch = source.match(/^created_date:\s*['"]?([^'"\n]+)['"]?\s*$/mi);
+  const ordinalRaw = fm.ordinal;
+  const ordinal = typeof ordinalRaw === 'number' && Number.isFinite(ordinalRaw)
+    ? ordinalRaw
+    : Number.parseInt(String(ordinalRaw || ''), 10);
   return enrichTask({
-    id: idMatch ? idMatch[1].trim() : '',
+    id: fm.id ? String(fm.id).trim() : '',
     title,
     status,
-    priority: priorityLabel(priorityMatch ? priorityMatch[1].trim() : 'Medium'),
-    type: typeMatch ? typeMatch[1].trim() : 'task',
-    ordinal: Number(ordinalMatch?.[1] || Number.MAX_SAFE_INTEGER),
+    priority: priorityLabel(fm.priority || 'Medium'),
+    type: fm.type ? String(fm.type).trim() : 'task',
+    ordinal: Number.isFinite(ordinal) ? ordinal : Number.MAX_SAFE_INTEGER,
     labels,
-    createdDate: createdMatch ? createdMatch[1].trim() : '',
-    substatus: parseFrontmatterField(source, 'substatus'),
-    nextAction: parseFrontmatterField(source, 'next_action'),
+    createdDate: getFrontmatterField(source, 'created_date'),
+    substatus: getFrontmatterField(source, 'substatus'),
+    nextAction: getFrontmatterField(source, 'next_action'),
   });
 }
-
-const PRIORITY_ORDER = new Map([['ultra high', 0], ['high', 1], ['medium', 2], ['low', 3]]);
-function priorityLabel(priority) {
-  const normalized = String(priority || '').trim().toLowerCase();
-  return normalized === 'ultra high' ? 'Ultra High' : normalized ? `${normalized[0].toUpperCase()}${normalized.slice(1)}` : 'Medium';
-}
-function priorityRank(priority) { return PRIORITY_ORDER.get(String(priority || '').trim().toLowerCase()) ?? 99; }
 function sortTasksByPriority(tasks) {
   return [...tasks].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title, 'es'));
 }
@@ -182,669 +206,84 @@ function projectTasks(project) {
   return tasks;
 }
 
-function parseDateStamp(value) {
-  const input = String(value || '').trim();
-  if (!input) return null;
-  const normalized = input.includes('T') ? input : input.replace(' ', 'T');
-  const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
-
-function parseFrontmatterList(source, field) {
-  const input = String(source || '');
-  const block = input.match(new RegExp(`^${field}:\\s*\\n((?:\\s+-\\s+.+\\n?)*)`, 'mi'));
-  if (block) {
-    return [...block[1].matchAll(/^\s+-\s+(.+)$/gm)]
-      .map((item) => item[1].trim())
-      .filter(Boolean);
-  }
-  const inline = input.match(new RegExp(`^${field}:\\s*\\[(.*?)\\]\\s*$`, 'mi'));
-  if (inline) {
-    return inline[1].split(',').map((item) => item.trim()).filter(Boolean);
-  }
-  return [];
-}
-
-function parseFrontmatterNumber(source, field) {
-  const input = String(source || '');
-  const match = input.match(new RegExp(`^${field}:\\s*([0-9]+(?:\\.[0-9]+)?)\\s*$`, 'mi'));
-  if (!match) return null;
-  const value = Number(match[1]);
-  return Number.isFinite(value) ? value : null;
-}
-
-function dependencyAnchors(relation) {
-  const normalized = String(relation || 'FS').toUpperCase();
-  if (normalized === 'SS') return { relation: 'SS', fromAnchor: 'start', toAnchor: 'start', sequential: false };
-  if (normalized === 'FF') return { relation: 'FF', fromAnchor: 'end', toAnchor: 'end', sequential: false };
-  if (normalized === 'SF') return { relation: 'SF', fromAnchor: 'start', toAnchor: 'end', sequential: true };
-  return { relation: 'FS', fromAnchor: 'end', toAnchor: 'start', sequential: true };
-}
-
-function parseDependencySpec(raw, iaHoursPerDay) {
-  const value = String(raw || '').trim();
-  if (!value) return null;
-
-  const compact = value.replace(/\s+/g, '');
-  const match = compact.match(/^([A-Za-z0-9][A-Za-z0-9-]*)(?:[:|@](FS|SS|FF|SF)([+-]\d+(?:[dh])?)?)?$/i)
-    || compact.match(/^([A-Za-z0-9][A-Za-z0-9-]*)$/);
-  if (!match) return null;
-
-  const id = String(match[1] || '').trim();
-  if (!id) return null;
-
-  const anchors = dependencyAnchors(match[2] || 'FS');
-  const lagToken = String(match[3] || '').trim();
-  let lagBusinessDays = 0;
-  let lagIaHours = 0;
-
-  if (lagToken) {
-    const lagMatch = lagToken.match(/^([+-]\d+)([dh])?$/i);
-    if (lagMatch) {
-      const amount = Number(lagMatch[1]);
-      const unit = String(lagMatch[2] || 'd').toLowerCase();
-      if (Number.isFinite(amount)) {
-        if (unit === 'h') {
-          lagIaHours = amount;
-          lagBusinessDays = iaHoursPerDay > 0 ? Math.trunc(amount / iaHoursPerDay) : 0;
-        } else {
-          lagBusinessDays = amount;
-          lagIaHours = amount * iaHoursPerDay;
-        }
-      }
-    }
-  }
-
-  return {
-    raw: value,
-    id,
-    relation: anchors.relation,
-    fromAnchor: anchors.fromAnchor,
-    toAnchor: anchors.toAnchor,
-    lagBusinessDays,
-    lagIaHours,
-    sequential: anchors.sequential,
-  };
-}
-
-function parseHolidayList(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
-  return String(value)
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function formatIsoDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function shiftDate(date, deltaDays) {
-  const shifted = new Date(date);
-  shifted.setDate(shifted.getDate() + deltaDays);
-  return shifted;
-}
-
-function moveToMondayDate(date) {
-  const moved = new Date(date);
-  while (moved.getDay() !== 1) moved.setDate(moved.getDate() + 1);
-  return moved;
-}
-
-function easterDate(year) {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month - 1, day);
-}
-
-function colombiaHolidaysByYear(year) {
-  const fixed = [
-    new Date(year, 0, 1),
-    new Date(year, 4, 1),
-    new Date(year, 6, 20),
-    new Date(year, 7, 7),
-    new Date(year, 11, 8),
-    new Date(year, 11, 25),
-  ];
-
-  const emiliani = [
-    moveToMondayDate(new Date(year, 0, 6)),
-    moveToMondayDate(new Date(year, 2, 19)),
-    moveToMondayDate(new Date(year, 5, 29)),
-    moveToMondayDate(new Date(year, 7, 15)),
-    moveToMondayDate(new Date(year, 9, 12)),
-    moveToMondayDate(new Date(year, 10, 1)),
-    moveToMondayDate(new Date(year, 10, 11)),
-  ];
-
-  const easter = easterDate(year);
-  const easterBased = [
-    shiftDate(easter, -3),
-    shiftDate(easter, -2),
-    moveToMondayDate(shiftDate(easter, 43)),
-    moveToMondayDate(shiftDate(easter, 64)),
-    moveToMondayDate(shiftDate(easter, 71)),
-  ];
-
-  return [...fixed, ...emiliani, ...easterBased].map((date) => formatIsoDate(date));
-}
-
-function colombiaHolidaysAround(startDate) {
-  const year = startDate.getFullYear();
-  return [...new Set([...colombiaHolidaysByYear(year), ...colombiaHolidaysByYear(year + 1)])];
-}
-
-function toDateOnlyIso(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function parseStartDate(value) {
-  const input = String(value || '').trim();
-  if (!input) return new Date();
-  const date = new Date(`${input}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? new Date() : date;
-}
-
-function buildWorkingCalendar(options = {}) {
-  const today = parseStartDate(options.startDate);
-  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const iaHoursPerDay = Math.max(1, Math.min(24, Number(options.iaHoursPerDay) || 8));
-  const workOnSaturday = options.workOnSaturday === true;
-  const holidaySet = new Set([
-    ...colombiaHolidaysAround(startDate),
-    ...parseHolidayList(options.holidays),
-  ]);
-
-  const dayDiff = (from, to) => {
-    const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-    const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
-    return Math.round((end.getTime() - start.getTime()) / 86400000);
-  };
-
-  const isWorkingDay = (date) => {
-    const day = date.getDay();
-    const sunday = day === 0;
-    const saturday = day === 6;
-    if (sunday) return false;
-    if (!workOnSaturday && saturday) return false;
-    return !holidaySet.has(toDateOnlyIso(date));
-  };
-
-  const toCalendarMarker = (hourOffset) => {
-    const safeOffset = Math.max(0, Number(hourOffset) || 0);
-    let remaining = safeOffset;
-    let businessDayIndex = 0;
-    const cursor = new Date(startDate);
-
-    while (!isWorkingDay(cursor)) cursor.setDate(cursor.getDate() + 1);
-
-    while (remaining >= iaHoursPerDay) {
-      remaining -= iaHoursPerDay;
-      do {
-        cursor.setDate(cursor.getDate() + 1);
-      } while (!isWorkingDay(cursor));
-      businessDayIndex += 1;
-    }
-
-    return {
-      date: new Date(cursor),
-      dateIso: toDateOnlyIso(cursor),
-      monthKey: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
-      monthLabel: cursor.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }),
-      businessDayIndex,
-      hourInDay: remaining,
-      calendarDayOfWeek: cursor.getDay(),
-    };
-  };
-
-  return {
-    startDateIso: toDateOnlyIso(startDate),
-    startDate,
-    iaHoursPerDay,
-    workOnSaturday,
-    holidays: [...holidaySet],
-    isWorkingDay,
-    dayDiff,
-    toCalendarMarker,
-  };
-}
-
-function isDoneStatus(status) {
-  return /done|complete/i.test(String(status || ''));
-}
-
-function defaultDurationByPriority(priority) {
-  const key = String(priority || '').toLowerCase();
-  if (key === 'ultra high') return 4;
-  if (key === 'high') return 3;
-  if (key === 'low') return 1;
-  return 2;
-}
-
-function estimateTaskDurationDays(task) {
-  const fromEstimate = parseFrontmatterNumber(task.source, 'estimate_days')
-    ?? parseFrontmatterNumber(task.source, 'effort_days')
-    ?? parseFrontmatterNumber(task.source, 'duration_days');
-  if (fromEstimate && fromEstimate > 0) return Math.max(1, Math.round(fromEstimate));
-  return defaultDurationByPriority(task.priority);
-}
-
-function estimateTaskIaHours(task, iaHoursPerDay) {
-  const fromHours = parseFrontmatterNumber(task.source, 'estimate_ia_hours')
-    ?? parseFrontmatterNumber(task.source, 'estimate_hours')
-    ?? parseFrontmatterNumber(task.source, 'effort_hours')
-    ?? parseFrontmatterNumber(task.source, 'duration_hours');
-  if (fromHours && fromHours > 0) return Math.max(1, Math.round(fromHours));
-  return estimateTaskDurationDays(task) * iaHoursPerDay;
-}
-
-function toPlanningTask(task, iaHoursPerDay) {
-  const dependencyLinks = parseFrontmatterList(task.source, 'dependencies')
-    .map((item) => parseDependencySpec(item, iaHoursPerDay))
-    .filter((item) => item && item.id);
-  const dependencies = dependencyLinks.map((item) => item.id);
-  const createdDate = parseDateStamp(parseFrontmatterField(task.source, 'created_date')) || parseDateStamp(task.createdDate);
-  const updatedDate = parseDateStamp(parseFrontmatterField(task.source, 'updated_date'));
-  const startedDate = parseDateStamp(parseFrontmatterField(task.source, 'started_date')) || createdDate;
-  const dueDate = parseDateStamp(parseFrontmatterField(task.source, 'due_date'));
-  const durationIaHours = estimateTaskIaHours(task, iaHoursPerDay);
-  return {
-    ...task,
-    durationDays: Math.max(1, Math.round(durationIaHours / iaHoursPerDay)),
-    durationIaHours,
-    dependencies,
-    dependencyLinks,
-    createdDate,
-    startedDate,
-    updatedDate,
-    dueDate,
-  };
-}
-
-function criticalPath(nodes, dependents, pendingMap) {
-  const memo = new Map();
-  const pathMemo = new Map();
-
-  const score = (id, stack = new Set()) => {
-    if (memo.has(id)) return memo.get(id);
-    if (stack.has(id)) return pendingMap.get(id)?.durationIaHours || 1;
-    stack.add(id);
-    const node = pendingMap.get(id);
-    const children = dependents.get(id) || [];
-    let bestChild = null;
-    let bestScore = 0;
-    for (const childId of children) {
-      const childScore = score(childId, stack);
-      if (childScore > bestScore) {
-        bestScore = childScore;
-        bestChild = childId;
-      }
-    }
-    stack.delete(id);
-    const own = (node?.durationIaHours || 1) + bestScore;
-    memo.set(id, own);
-    pathMemo.set(id, bestChild);
-    return own;
-  };
-
-  let bestRoot = null;
-  let best = 0;
-  for (const node of nodes) {
-    const value = score(node.id);
-    if (value > best) {
-      best = value;
-      bestRoot = node.id;
-    }
-  }
-
-  const route = [];
-  const visited = new Set();
-  let cursor = bestRoot;
-  while (cursor && !visited.has(cursor)) {
-    visited.add(cursor);
-    const node = pendingMap.get(cursor);
-    if (!node) break;
-    route.push({
-      id: node.id,
-      title: node.title,
-      durationDays: node.durationDays,
-      durationIaHours: node.durationIaHours,
-      priority: node.priority,
-    });
-    cursor = pathMemo.get(cursor);
-  }
-  return { route, estimatedIaHours: best };
-}
 
 function buildProjectGantt(project, options = {}) {
-  const capacity = Math.max(1, Math.min(12, Number(options.capacity) || 1));
-  const includeDone = options.includeDone !== false;
-  const calendar = buildWorkingCalendar(options);
-  const iaHoursPerDay = calendar.iaHoursPerDay;
-  const tasks = projectTasks(project).map((task) => toPlanningTask(task, iaHoursPerDay));
-  const doneTasks = tasks.filter((task) => isDoneStatus(task.status));
-  const pendingTasks = tasks.filter((task) => !isDoneStatus(task.status));
-  const pendingMap = new Map(pendingTasks.map((task) => [task.id, task]));
-  const doneIds = new Set(doneTasks.map((task) => task.id));
-  const dependents = new Map();
-  const indegree = new Map();
+  const aiCapacityConfig = readAiCapacityConfig(project);
+  const fallbackCapacity = options.capacity != null
+    ? Number(options.capacity)
+    : effectiveCapacityFromConfig(aiCapacityConfig, 2);
+  return buildGanttPlan(project, {
+    ...options,
+    aiCapacityConfig,
+    resourceConfig: readResourceConfig(project, fallbackCapacity),
+  }, projectTasks);
+}
 
-  for (const task of pendingTasks) {
-    indegree.set(task.id, 0);
-    dependents.set(task.id, []);
-  }
-
-  for (const task of pendingTasks) {
-    const pendingLinks = (task.dependencyLinks || []).filter((dep) => pendingMap.has(dep.id));
-    const pendingDeps = [...new Set(pendingLinks.map((dep) => dep.id))];
-    task.pendingDependencyLinks = pendingLinks;
-    task.pendingDependencies = pendingDeps;
-    for (const depId of pendingDeps) {
-      indegree.set(task.id, (indegree.get(task.id) || 0) + 1);
-      dependents.get(depId).push(task.id);
-    }
-  }
-
-  const prioritySort = (a, b) => {
-    const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
-    if (byPriority !== 0) return byPriority;
-    const byOrdinal = (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER);
-    if (byOrdinal !== 0) return byOrdinal;
-    return a.title.localeCompare(b.title, 'es');
-  };
-
-  const running = [];
-  const schedule = new Map();
-  const completed = new Set();
-  let timelineHour = 0;
-
-  const planTask = (task, startIaHour) => {
-    const endIaHour = startIaHour + task.durationIaHours;
-    const startCalendar = calendar.toCalendarMarker(startIaHour);
-    const endCalendar = calendar.toCalendarMarker(Math.max(0, endIaHour - 1));
-    const startCalendarDay = calendar.dayDiff(calendar.startDate, startCalendar.date);
-    const endCalendarDay = calendar.dayDiff(calendar.startDate, endCalendar.date);
-    schedule.set(task.id, {
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      type: task.type,
-      priority: task.priority,
-      dependencies: task.dependencies,
-      dependencyLinks: task.dependencyLinks,
-      pendingDependencies: task.pendingDependencies,
-      pendingDependencyLinks: task.pendingDependencyLinks,
-      durationDays: task.durationDays,
-      durationIaHours: task.durationIaHours,
-      startDay: startCalendar.businessDayIndex,
-      endDay: endCalendar.businessDayIndex + 1,
-      startIaHour,
-      endIaHour,
-      startDate: startCalendar.dateIso,
-      endDate: endCalendar.dateIso,
-      startCalendarDay,
-      endCalendarDay,
-      startMonth: startCalendar.monthLabel,
-      endMonth: endCalendar.monthLabel,
-      startHourInDay: startCalendar.hourInDay,
-      endHourInDay: endCalendar.hourInDay,
-      lane: String(task.type || '').toLowerCase() === 'bug' ? 'bugs' : 'mejoras',
-      canRunInParallel: task.pendingDependencies.length === 0
-        || (task.pendingDependencyLinks || []).some((dep) => dep.relation === 'SS' || dep.relation === 'FF'),
-    });
-  };
-
-  const dependencyStartConstraint = (task) => {
-    let earliestStartIaHour = 0;
-    let waitingForPredecessor = false;
-
-    for (const dep of task.pendingDependencyLinks || []) {
-      const predecessor = pendingMap.get(dep.id);
-      if (!predecessor) continue;
-      const predecessorSchedule = schedule.get(dep.id);
-      if (!predecessorSchedule) {
-        waitingForPredecessor = true;
-        continue;
-      }
-
-      const relation = String(dep.relation || 'FS').toUpperCase();
-      const lagIaHours = Number(dep.lagIaHours || 0);
-      let relationBound = predecessorSchedule.endIaHour;
-
-      if (relation === 'SS') {
-        relationBound = predecessorSchedule.startIaHour + lagIaHours;
-      } else if (relation === 'FF') {
-        relationBound = predecessorSchedule.endIaHour + lagIaHours - task.durationIaHours;
-      } else if (relation === 'SF') {
-        relationBound = predecessorSchedule.startIaHour + lagIaHours - task.durationIaHours;
-      } else {
-        relationBound = predecessorSchedule.endIaHour + lagIaHours;
-      }
-
-      earliestStartIaHour = Math.max(earliestStartIaHour, relationBound);
-    }
-
-    return {
-      earliestStartIaHour: Math.max(0, Math.round(earliestStartIaHour)),
-      waitingForPredecessor,
-    };
-  };
-
-  while (completed.size < pendingTasks.length) {
-    const finishedNow = running.filter((item) => item.endIaHour <= timelineHour);
-    for (const item of finishedNow) {
-      completed.add(item.id);
-      const index = running.findIndex((candidate) => candidate.id === item.id);
-      if (index >= 0) running.splice(index, 1);
-    }
-
-    let startedThisTick = false;
-    let canStartMore = true;
-
-    while (running.length < capacity && canStartMore) {
-      canStartMore = false;
-      const unscheduled = pendingTasks
-        .filter((task) => !schedule.has(task.id))
-        .sort(prioritySort);
-
-      for (const task of unscheduled) {
-        const constraint = dependencyStartConstraint(task);
-        if (constraint.waitingForPredecessor) continue;
-        if (timelineHour < constraint.earliestStartIaHour) continue;
-
-        planTask(task, Math.max(timelineHour, constraint.earliestStartIaHour));
-        const plannedTask = schedule.get(task.id);
-        running.push({ id: task.id, endIaHour: plannedTask.endIaHour });
-        startedThisTick = true;
-        canStartMore = true;
-        break;
-      }
-    }
-
-    if (completed.size >= pendingTasks.length) break;
-
-    if (running.length === 0 && !startedThisTick) {
-      let nextHour = Number.POSITIVE_INFINITY;
-      for (const task of pendingTasks) {
-        if (schedule.has(task.id)) continue;
-        const constraint = dependencyStartConstraint(task);
-        if (constraint.waitingForPredecessor) continue;
-        if (constraint.earliestStartIaHour > timelineHour) {
-          nextHour = Math.min(nextHour, constraint.earliestStartIaHour);
-        }
-      }
-
-      if (Number.isFinite(nextHour)) {
-        timelineHour = nextHour;
-        continue;
-      }
-
-      break;
-    }
-
-    timelineHour += 1;
-  }
-
-  const unresolved = pendingTasks.filter((task) => !schedule.has(task.id));
-  for (const task of unresolved.sort(prioritySort)) {
-    const syntheticStart = timelineHour;
-    planTask(task, syntheticStart);
-  }
-
-  const planned = [...schedule.values()].sort((a, b) => a.startDay - b.startDay || priorityRank(a.priority) - priorityRank(b.priority));
-  const byStartHour = new Map();
-  for (const item of planned) {
-    if (!byStartHour.has(item.startIaHour)) byStartHour.set(item.startIaHour, []);
-    byStartHour.get(item.startIaHour).push(item.id);
-  }
-
-  const parallelGroups = [...byStartHour.entries()]
-    .filter(([, ids]) => ids.length > 1)
-    .map(([startIaHour, ids]) => {
-      const marker = calendar.toCalendarMarker(startIaHour);
-      return {
-        startIaHour,
-        startDay: marker.businessDayIndex,
-        startDate: marker.dateIso,
-        ids,
-      };
-    });
-
-  const critical = criticalPath(pendingTasks, dependents, pendingMap);
-  const total = tasks.length;
-  const done = doneTasks.length;
-  const completionRate = total > 0 ? Math.round((done / total) * 100) : 0;
-
-  const doneTimeline = includeDone
-    ? doneTasks.map((task) => ({
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      durationDays: task.durationDays,
-      durationIaHours: task.durationIaHours,
-      startDay: 0,
-      endDay: task.durationDays,
-      startIaHour: 0,
-      endIaHour: task.durationIaHours,
-      startDate: calendar.startDateIso,
-      endDate: calendar.startDateIso,
-      lane: String(task.type || '').toLowerCase() === 'bug' ? 'bugs' : 'mejoras',
-      completedAt: task.updatedDate ? task.updatedDate.toISOString() : null,
-    }))
-    : [];
-
-  const dependencyEdges = pendingTasks.flatMap((task) =>
-    (task.pendingDependencyLinks || []).map((dep) => ({
-      fromId: dep.id,
-      toId: task.id,
-      relation: dep.relation,
-      fromAnchor: dep.fromAnchor,
-      toAnchor: dep.toAnchor,
-      lagBusinessDays: dep.lagBusinessDays,
-      lagIaHours: dep.lagIaHours,
-      sequential: dep.sequential,
-    }))
-  );
-
-  const monthMarkers = [];
-  const maxHour = planned.reduce((max, item) => Math.max(max, item.endIaHour), 0);
-  const totalBusinessDays = Math.max(1, Math.ceil(maxHour / iaHoursPerDay));
-  const dayMarkers = [];
-  const preCalendarPaddingDays = 120;
-  const maxCalendarDate = planned.reduce((max, task) => {
-    const end = parseStartDate(task.endDate);
-    return end > max ? end : max;
-  }, parseStartDate(calendar.startDateIso));
-  const totalCalendarDays = Math.max(180, calendar.dayDiff(calendar.startDate, maxCalendarDate) + 1 + preCalendarPaddingDays);
-  for (let dayIndex = 0; dayIndex < totalCalendarDays; dayIndex += 1) {
-    const date = new Date(calendar.startDate);
-    date.setDate(calendar.startDate.getDate() + dayIndex - preCalendarPaddingDays);
-    const isWorking = calendar.isWorkingDay(date);
-    const iso = toDateOnlyIso(date);
-    dayMarkers.push({
-      dayIndex,
-      date: iso,
-      monthKey: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-      monthLabel: date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }),
-      dayLabel: date.toLocaleDateString('es-CO', { weekday: 'short' }),
-      dayNumber: date.getDate(),
-      isWorking,
-      isSaturday: date.getDay() === 6,
-      isSunday: date.getDay() === 0,
-      isHoliday: calendar.holidays.includes(iso),
-    });
-  }
-
-  for (const task of planned) {
-    task.startCalendarDay += preCalendarPaddingDays;
-    task.endCalendarDay += preCalendarPaddingDays;
-  }
-  const seenMonths = new Set();
-  for (const marker of dayMarkers) {
-    if (seenMonths.has(marker.monthKey)) continue;
-    seenMonths.add(marker.monthKey);
-    monthMarkers.push({
-      monthKey: marker.monthKey,
-      monthLabel: marker.monthLabel,
-      atIaHour: marker.dayIndex * iaHoursPerDay,
-      atBusinessDay: marker.dayIndex,
-      atCalendarDay: marker.dayIndex,
-      date: marker.date,
-    });
-  }
-
+function ganttOptionsFromRequest(url, project) {
+  const config = project ? readAiCapacityConfig(project) : null;
+  const queryCapacity = url.searchParams.get('capacity');
+  const capacity = queryCapacity
+    ? Number(queryCapacity || '2')
+    : effectiveCapacityFromConfig(config, 2);
   return {
-    project: { slug: project.slug, name: project.name },
-    parameters: {
-      capacity,
-      includeDone,
-      iaHoursPerDay,
-      startDate: calendar.startDateIso,
-      holidays: calendar.holidays,
-      workOnSaturday: calendar.workOnSaturday,
-    },
-    summary: {
-      totalTasks: total,
-      doneTasks: done,
-      pendingTasks: pendingTasks.length,
-      completionRate,
-      estimatedPendingIaHours: planned.reduce((max, item) => Math.max(max, item.endIaHour), 0),
-      estimatedPendingDays: planned.reduce((max, item) => Math.max(max, item.endDay), 0),
-      blockedByDependencies: pendingTasks.filter((task) => task.pendingDependencies.length > 0).length,
-      unresolvedDependencies: pendingTasks.filter((task) =>
-        (task.dependencyLinks || []).some((dep) => !pendingMap.has(dep.id) && !doneIds.has(dep.id))
-      ).length,
-      cycleDetected: unresolved.length > 0,
-    },
-    criticalPath: critical,
-    parallelGroups,
-    dependencyEdges,
-    monthMarkers,
-    dayMarkers,
-    tasks: planned,
-    doneTimeline,
-    generatedAt: new Date().toISOString(),
+    capacity,
+    capacityBugs: url.searchParams.get('capacityBugs') || undefined,
+    capacityEnhancements: url.searchParams.get('capacityEnhancements') || undefined,
+    includeDone: url.searchParams.get('includeDone') !== '0',
+    iaHoursPerDay: Number(url.searchParams.get('iaHoursPerDay') || '8'),
+    startDate: url.searchParams.get('startDate') || '',
+    holidays: (url.searchParams.get('holidays') || '').split(',').map((item) => item.trim()).filter(Boolean),
+    workOnSaturday: url.searchParams.get('workOnSaturday') === '1',
+    resourceAware: url.searchParams.get('resourceAware') === '1',
   };
+}
+
+function createProjectBaseline(project, payload = {}, ganttOptions = {}) {
+  const plan = buildProjectGantt(project, ganttOptions);
+  const baseline = buildBaselineFromPlan(plan, {
+    name: payload.name,
+    author: payload.author,
+    id: payload.id,
+  });
+  return writeBaselineAtomic(project, baseline);
+}
+
+function compareProjectBaseline(project, baselineId, ganttOptions = {}) {
+  const baseline = readBaselineFile(project, baselineId);
+  const plan = buildProjectGantt(project, ganttOptions);
+  return compareBaselineToPlan(baseline, plan);
+}
+
+
+function buildProjectGanttMetrics(project, ganttOptions = {}) {
+  const plan = buildProjectGantt(project, ganttOptions);
+  const baselines = listBaselines(project);
+  const latest = baselines[0] || null;
+  let baselinePayload = null;
+  let baselineCompare = null;
+  if (latest) {
+    try {
+      baselinePayload = readBaselineFile(project, latest.id);
+      baselineCompare = compareProjectBaseline(project, latest.id, ganttOptions);
+    } catch {
+      baselinePayload = null;
+      baselineCompare = null;
+    }
+  }
+  return buildHubGanttMetrics(plan, {
+    baseline: baselinePayload,
+    baselineCompare,
+  });
+}
+
+function buildPortfolioGantt(ganttOptions = {}) {
+  return buildGanttPortfolio(readCatalog(), ganttOptions, {
+    buildProjectGantt,
+    buildProjectGanttMetrics,
+    projectTasks,
+    readAiCapacityConfig,
+    projectExists: (project) => fs.existsSync(project.path),
+  });
 }
 
 function summarize(project) {
@@ -855,7 +294,7 @@ function summarize(project) {
   const impDone = improvements.filter((task) => /done|complete/i.test(task.status)).length;
   const nextBug = pickNextBug(tasks);
   const nextImprovement = pickNextImprovement(tasks);
-  return {
+  const summary = {
     ...project,
     exists: fs.existsSync(project.path),
     bugs: bugs.length,
@@ -875,6 +314,19 @@ function summarize(project) {
     focus: bugs.length - bugsDone > 0 ? 'bugs' : 'mejoras',
     boardRunning: project.port === BOARD_PORT,
   };
+
+  if (!summary.exists) {
+    summary.ganttMetrics = null;
+    return summary;
+  }
+
+  try {
+    summary.ganttMetrics = buildProjectGanttMetrics(project, { includeDone: false });
+  } catch {
+    summary.ganttMetrics = null;
+  }
+
+  return summary;
 }
 
 function json(res, status, body) {
@@ -907,27 +359,8 @@ function writeAiCapacityConfig(project, config) {
   return config;
 }
 
-function normalizeAiOperators(operators) {
-  if (!Array.isArray(operators)) return [];
-  const seen = new Set();
-  const normalized = [];
-  for (const raw of operators) {
-    const id = String(raw?.id || '').trim() || slugify(String(raw?.name || '').trim());
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    normalized.push({
-      id,
-      name: String(raw?.name || id).trim(),
-      active: raw?.active !== false,
-      maxParallel: Math.max(1, Math.min(6, Number(raw?.maxParallel) || 1)),
-      hoursPerDay: Math.max(1, Math.min(24, Number(raw?.hoursPerDay) || 8)),
-    });
-  }
-  return normalized;
-}
-
 function normalizeAiCapacityConfigPayload(data) {
-  const capacity = Math.max(1, Math.min(12, Number(data?.capacity) || 1));
+  const capacity = normalizeCapacityConfigField(data, 1);
   const operators = normalizeAiOperators(data?.operators);
   const operatorById = new Map(operators.map((operator) => [operator.id, operator]));
   const operatorIdByName = new Map(
@@ -965,29 +398,14 @@ function normalizeAiCapacityConfigPayload(data) {
   return {
     version: Math.max(1, Number(data?.version) || 1),
     capacity,
+    capacityBugs: data?.capacityBugs != null ? Math.max(1, Math.min(12, Number(data.capacityBugs) || 1)) : undefined,
+    capacityEnhancements: data?.capacityEnhancements != null
+      ? Math.max(1, Math.min(12, Number(data.capacityEnhancements) || 1))
+      : undefined,
     aiModels,
     operators,
     updatedAt: new Date().toISOString(),
   };
-}
-
-function effectiveCapacityFromConfig(config, fallbackCapacity) {
-  const fallback = Math.max(1, Math.min(12, Number(fallbackCapacity) || 2));
-  if (!config || typeof config !== 'object') return fallback;
-
-  const humanCapacity = Math.max(1, Math.min(12, Number(config.capacity) || fallback));
-  const models = Array.isArray(config.aiModels) ? config.aiModels : [];
-  const enabledModels = models.filter((model) => model?.enabled !== false);
-  const modelSlots = Math.max(1, enabledModels.reduce((sum, model) => sum + Math.max(1, Math.min(6, Number(model.maxParallel) || 1)), 0));
-
-  const modelsNeedingOperator = enabledModels.filter((model) => Boolean(model.requiresOperator));
-  const operators = normalizeAiOperators(config.operators);
-  const activeOperatorSlots = operators
-    .filter((operator) => operator.active)
-    .reduce((sum, operator) => sum + Math.max(1, Math.min(6, Number(operator.maxParallel) || 1)), 0);
-  const operatorBound = modelsNeedingOperator.length > 0 ? Math.max(1, activeOperatorSlots || 1) : modelSlots;
-
-  return Math.max(1, Math.min(humanCapacity, modelSlots, operatorBound));
 }
 
 function normalizeTextKey(value) {
@@ -1027,38 +445,6 @@ function parseListValue(value) {
   return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-function upsertFrontmatterScalar(source, field, value) {
-  const text = String(source || '');
-  const match = text.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return text;
-  const lines = match[1].split('\n');
-  const index = lines.findIndex((line) => new RegExp(`^${field}:\\s*`).test(line));
-  const rendered = typeof value === 'number' ? `${field}: ${value}` : `${field}: '${String(value).replace(/'/g, "''")}'`;
-  if (index >= 0) lines[index] = rendered;
-  else lines.push(rendered);
-  const next = `---\n${lines.join('\n')}\n---`;
-  return `${next}${text.slice(match[0].length)}`;
-}
-
-function upsertFrontmatterList(source, field, values) {
-  const text = String(source || '');
-  const match = text.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return text;
-  const list = [...new Set(values.map((item) => String(item).trim()).filter(Boolean))];
-  const lines = match[1].split('\n');
-  const start = lines.findIndex((line) => new RegExp(`^${field}:\\s*$`).test(line));
-  if (start >= 0) {
-    let end = start + 1;
-    while (end < lines.length && /^\s*-\s+/.test(lines[end])) end += 1;
-    const replacement = list.length ? [ `${field}:`, ...list.map((item) => `  - ${item}`) ] : [];
-    lines.splice(start, end - start, ...replacement);
-  } else if (list.length) {
-    lines.push(`${field}:`, ...list.map((item) => `  - ${item}`));
-  }
-  const next = `---\n${lines.join('\n')}\n---`;
-  return `${next}${text.slice(match[0].length)}`;
-}
-
 function enrichTaskSource(source, row) {
   let next = String(source || '');
   const estimateIaHours = Number(row.estimateIaHours ?? row.estimate_ia_hours ?? row.estimate_hours);
@@ -1080,66 +466,81 @@ function enrichTaskSource(source, row) {
 }
 
 function normalizeBulkTaskUpdates(input) {
-  const updates = input && typeof input === 'object' ? input : {};
-  const patch = {};
-
-  const estimateIaRaw = updates.estimateIaHours ?? updates.estimate_ia_hours ?? updates.estimate_hours;
-  if (estimateIaRaw !== undefined && estimateIaRaw !== null && String(estimateIaRaw).trim() !== '') {
-    const estimateIaHours = Number(estimateIaRaw);
-    if (!Number.isFinite(estimateIaHours) || estimateIaHours <= 0) {
-      throw new Error('estimateIaHours debe ser un número mayor que cero');
-    }
-    patch.estimateIaHours = Math.max(1, Math.round(estimateIaHours));
-  }
-
-  const estimateDaysRaw = updates.estimateDays ?? updates.estimate_days;
-  if (estimateDaysRaw !== undefined && estimateDaysRaw !== null && String(estimateDaysRaw).trim() !== '') {
-    const estimateDays = Number(estimateDaysRaw);
-    if (!Number.isFinite(estimateDays) || estimateDays <= 0) {
-      throw new Error('estimateDays debe ser un número mayor que cero');
-    }
-    patch.estimateDays = Math.max(1, Math.round(estimateDays));
-  }
-
-  const startedDateRaw = updates.startedDate ?? updates.started_date;
-  if (startedDateRaw !== undefined && startedDateRaw !== null && String(startedDateRaw).trim() !== '') {
-    const startedDate = String(startedDateRaw).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startedDate)) {
-      throw new Error('startedDate debe tener formato YYYY-MM-DD');
-    }
-    patch.startedDate = startedDate;
-  }
-
-  const dueDateRaw = updates.dueDate ?? updates.due_date;
-  if (dueDateRaw !== undefined && dueDateRaw !== null && String(dueDateRaw).trim() !== '') {
-    const dueDate = String(dueDateRaw).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
-      throw new Error('dueDate debe tener formato YYYY-MM-DD');
-    }
-    patch.dueDate = dueDate;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(updates, 'assignees') || Object.prototype.hasOwnProperty.call(updates, 'assignee')) {
-    patch.assignees = parseListValue(updates.assignees ?? updates.assignee);
-  }
-
-  return patch;
+  return normalizeTaskPatch(input);
 }
 
 function applyBulkTaskUpdatesToSource(source, updates) {
-  let next = String(source || '');
-  if (Number.isFinite(updates.estimateIaHours) && updates.estimateIaHours > 0) {
-    next = upsertFrontmatterScalar(next, 'estimate_ia_hours', updates.estimateIaHours);
+  return applyTaskPatchToSource(source, updates);
+}
+
+function writeTaskFileAtomic(filePath, content) {
+  const normalized = content.endsWith('\n') ? content : `${content}\n`;
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmpPath, normalized, 'utf8');
+  fs.renameSync(tmpPath, filePath);
+}
+
+function assertTaskPatchPreconditions(original, { expectedUpdatedDate, expectedHash, ifMatch } = {}) {
+  const hashCandidate = String(ifMatch || expectedHash || '').trim();
+  if (hashCandidate) {
+    const currentHash = computeSourceHash(original);
+    if (hashCandidate !== currentHash) {
+      throw new Error(`conflicto de edición: el hash actual (${currentHash}) no coincide con el esperado (${hashCandidate})`);
+    }
+    return;
   }
-  if (Number.isFinite(updates.estimateDays) && updates.estimateDays > 0) {
-    next = upsertFrontmatterScalar(next, 'estimate_days', updates.estimateDays);
+  const expected = String(expectedUpdatedDate || '').trim();
+  if (!expected) return;
+  const current = getFrontmatterField(original, 'updated_date');
+  if (current && current !== expected) {
+    throw new Error(`conflicto de edición: updated_date actual (${current || 'vacío'}) difiere del esperado (${expected})`);
   }
-  if (updates.startedDate) next = upsertFrontmatterScalar(next, 'started_date', updates.startedDate);
-  if (updates.dueDate) next = upsertFrontmatterScalar(next, 'due_date', updates.dueDate);
-  if (Object.prototype.hasOwnProperty.call(updates, 'assignees')) {
-    next = upsertFrontmatterList(next, 'assignee', updates.assignees);
+}
+
+function patchProjectTask(project, taskId, payload = {}) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+
+  const patch = normalizeTaskPatch(payload.patch || payload.updates || payload);
+  const patchKeys = Object.keys(patch);
+  if (!patchKeys.length) throw new Error('patch no contiene campos válidos para editar');
+
+  const filePath = resolveTaskFilePath(project, task);
+  const original = fs.readFileSync(filePath, 'utf8');
+  assertTaskPatchPreconditions(original, payload);
+
+  let next = applyTaskPatchToSource(original, patch);
+  if (next === original) throw new Error('no hubo cambios en la tarea');
+
+  next = touchUpdatedDate(validateTaskSource(task.id, next));
+  if (!payload.dryRun) writeTaskFileAtomic(filePath, next);
+
+  const finalSource = payload.dryRun ? next : fs.readFileSync(filePath, 'utf8');
+  return {
+    ...parseTask(filePath, finalSource),
+    file: task.file,
+    source: finalSource,
+    sourceHash: computeSourceHash(finalSource),
+    changes: patchKeys,
+    dryRun: Boolean(payload.dryRun),
+  };
+}
+
+function applyKanbanTemporalSync(project, taskId, fromStatus, toStatus) {
+  const task = findTask(project, taskId);
+  if (!task) return null;
+  const patch = buildKanbanTemporalPatch(task.source, { fromStatus, toStatus });
+  if (!Object.keys(patch).length) {
+    const filePath = resolveTaskFilePath(project, task);
+    return parseTask(filePath);
   }
-  return next;
+
+  const filePath = resolveTaskFilePath(project, task);
+  const original = fs.readFileSync(filePath, 'utf8');
+  let next = applyTaskPatchToSource(original, patch);
+  next = touchUpdatedDate(validateTaskSource(task.id, next));
+  writeTaskFileAtomic(filePath, next);
+  return parseTask(filePath);
 }
 
 function bulkEditProjectTasks(project, payload = {}) {
@@ -1383,6 +784,7 @@ function applyTaskStateFallback(project, taskId, status, queuedLabel) {
   next = setQueuedLabel(next, queuedLabel);
   next = touchUpdatedDate(next);
   fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+  applyKanbanTemporalSync(project, taskId, task.status, status);
   return parseTask(filePath);
 }
 
@@ -1435,11 +837,18 @@ async function updateQueueOrder(project, orderedIds) {
   return fullOrder;
 }
 
+function dependencyGateForTask(task, tasks) {
+  return evaluateDependencyGate(task, tasks, { policy: DEPENDENCY_GATE_POLICY });
+}
+
 async function updateTaskStatus(project, taskId, status) {
   const allowed = new Set(['To Do', 'Queued', 'In Progress', 'Done']);
   if (!allowed.has(status)) throw new Error('estado de tarea inválido');
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
+  if (status === 'In Progress') {
+    assertCanStartWork(task, projectTasks(project), { policy: DEPENDENCY_GATE_POLICY });
+  }
   const wasQueued = task.status.toLowerCase() === 'queued';
   if (status === 'Queued') {
     await ensureTaskQueued(project, task);
@@ -1456,6 +865,7 @@ async function updateTaskStatus(project, taskId, status) {
     const queued = sortQueuedTasks(projectTasks(project).filter((item) => item.status.toLowerCase() === 'queued'));
     await applyQueueOrdinals(project, [...queued.map((item) => item.id).filter((id) => id.toLowerCase() !== task.id.toLowerCase()), task.id]);
   }
+  applyKanbanTemporalSync(project, task.id, task.status, status);
   return parseTask(path.join(project.path, 'backlog', task.file));
 }
 
@@ -1553,14 +963,32 @@ function updateTaskDependencies(project, taskId, dependenciesInput) {
   };
 }
 
-function updateTaskChecklist(project, taskId, checkIndex, checked) {
+function updateTaskChecklist(project, taskId, checkIndex, checked, options = {}) {
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
   const filePath = resolveTaskFilePath(project, task);
   const source = fs.readFileSync(filePath, 'utf8');
-  const next = touchUpdatedDate(validateTaskSource(task.id, toggleChecklistInSource(source, checkIndex, checked)));
+  let next = touchUpdatedDate(validateTaskSource(task.id, toggleChecklistInSource(source, checkIndex, checked)));
+  const suggestedProgress = suggestProgressFromChecklist(next);
+  let progressApplied = false;
+
+  if (options.applySuggestedProgress && suggestedProgress != null) {
+    next = applyTaskPatchToSource(next, { progress: suggestedProgress });
+    progressApplied = true;
+  }
+
   fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
-  return { ...parseTask(filePath), file: task.file, source: next, detailHtml: taskDetailHtml(next) };
+
+  const remainingDeclared = getFrontmatterNumber(next, 'remaining_ia_hours');
+  return {
+    ...parseTask(filePath),
+    file: task.file,
+    source: next,
+    detailHtml: taskDetailHtml(next),
+    suggestedProgress,
+    progressApplied,
+    remainingPreserved: remainingDeclared != null,
+  };
 }
 
 function createTask(project, options = {}) {
@@ -1753,11 +1181,13 @@ function queueBoardPage(project) {
       const searchable = `${task.id} ${task.title} ${task.priority} ${task.type} ${task.effectiveSubstatus || ''} ${task.nextAction || ''} ${task.file}`.toLowerCase();
       const queuePosition = queue ? `<span class="queue-position" title="Posición en la cola"><small>Turno</small>${position + 1}</span>` : '';
       const dragHint = queue ? 'Drag to reorder queue' : 'Drag to change status';
+      const depGate = taskDependencyGateHtml(dependencyGateForTask(task, tasks), escapeHtml);
       return `<div role="button" tabindex="0" draggable="true" class="task${queue ? ' queue-task' : ''}${queue && position === 0 ? ' queue-next' : ''}" data-task="${index}" data-task-id="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status)}" data-search="${escapeHtml(searchable)}">
         ${queuePosition}
         <span class="task-heading"><strong class="task-id">${escapeHtml(task.id || 'SIN JM')}</strong><strong class="task-title">${escapeHtml(task.title)}</strong></span>
         <span class="task-meta"><span class="priority priority-${priorityRank(task.priority)}">${escapeHtml(task.priority)}</span><span class="type type-${escapeHtml(task.type)}">${escapeHtml(task.type)}</span></span>
         ${taskCardSubstatusHtml(task, escapeHtml)}
+        ${depGate}
         ${boardDragHintHtml(dragHint)}
       </div>`;
     }).join('') || `<p class="empty">${queue ? 'Arrastra aquí lo próximo que quieres ejecutar.' : 'Sin tareas'}</p>`;
@@ -1767,7 +1197,15 @@ function queueBoardPage(project) {
       <div class="task-list" data-drop-status="${escapeHtml(status)}">${content}<p class="search-empty">Sin coincidencias en esta columna.</p></div>
     </section>`;
   }).join('');
-  const taskData = JSON.stringify(tasks.map(({ id, title, status, priority, type, file, source, substatus, nextAction, effectiveSubstatus }) => ({ id, title, status, priority, type, file, detailHtml: taskDetailHtml(source), source, substatus, nextAction, effectiveSubstatus }))).replace(/</g, '\\u003c');
+  const taskData = JSON.stringify(tasks.map((task) => {
+    const { id, title, status, priority, type, file, source, substatus, nextAction, effectiveSubstatus } = task;
+    return {
+      id, title, status, priority, type, file,
+      detailHtml: taskDetailHtml(source),
+      source, substatus, nextAction, effectiveSubstatus,
+      dependencyGate: dependencyGateForTask(task, tasks),
+    };
+  })).replace(/</g, '\\u003c');
   const nextBanner = queuedNext
     ? `<section class="next-up"><span class="next-number">01</span><div class="next-copy"><span class="eyebrow">SIGUIENTE A EJECUTAR</span><h2>${escapeHtml(queuedNext.id)} · ${escapeHtml(queuedNext.title)}</h2><p><span class="priority priority-${priorityRank(queuedNext.priority)}">${escapeHtml(queuedNext.priority)}</span> Está primero en la cola operativa.</p></div><button class="primary" data-open-id="${escapeHtml(queuedNext.id)}">Ver detalle</button></section>`
     : '<section class="next-up empty-next"><span class="next-number">00</span><div class="next-copy"><span class="eyebrow">COLA DE EJECUCIÓN</span><h2>La cola está vacía</h2><p>Arrastra aquí la próxima tarea que quieres autorizar.</p></div></section>';
@@ -1791,7 +1229,7 @@ h1{margin:6px 0 4px;font-size:32px}.muted{color:#9aaac0}.toolbar{display:flex;ga
 .task-heading{display:grid;gap:5px;line-height:1.35}.task-id{color:#78dfcd;font-size:12px;letter-spacing:.06em}.task-title{font-size:13px}.task-meta{display:flex;gap:6px;margin-top:10px}.drag-hint{display:block;color:#71859e;font-size:10px;margin-top:10px}.queue-task{padding-left:52px;background:#292344;border-color:#594a88}.queue-task:hover{border-color:#a78bfa}.queue-next{background:linear-gradient(135deg,#3a2b64,#292344);border-color:#9a7cf0;box-shadow:0 6px 18px #150a3555}.queue-position{position:absolute;left:11px;top:13px;display:grid;place-items:center;width:31px;height:40px;border-radius:9px;background:#6d4bd2;color:#fff;font-size:16px;font-weight:900}.queue-position small{margin:0;color:#ddd6fe;font-size:7px;text-transform:uppercase;letter-spacing:.08em}
 .priority,.type,.badge{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:11px}.priority-0{background:#991b1b;color:#fee2e2}.priority-1{background:#92400e;color:#ffedd5}.priority-2{background:#164e63;color:#a5f3fc}.priority-3{background:#334155;color:#cbd5e1}.type{background:#183d42;color:#80e2d0}.type-bug{background:#be123c;color:#ffe4e6}
 .empty{color:#75869b;font-size:12px;line-height:1.5;padding:18px 8px;text-align:center;flex:1 1 auto;display:grid;place-items:center}.search-empty{display:none;color:#9aaac0;font-size:12px;line-height:1.5;padding:16px 8px;text-align:center;border:1px dashed #344a67;border-radius:11px;margin:9px 0}.column.search-no-results .search-empty{display:block}.column.search-no-results .empty{display:none}.primary,.secondary,.queue-action,.move-button,.delete-button{border:0;border-radius:9px;padding:10px 14px;font-weight:800;cursor:pointer}.primary,.queue-action{background:#73d8c6;color:#102131}.secondary{background:#334155;color:#e8eef8}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
-${boardDeleteStyles('mejoras')}${boardCardInteractionStyles('default')}${boardSubstatusStyles()}${boardTaskDetailStyles('default')}.status-actions{display:flex;gap:7px;flex-wrap:wrap;padding:13px;background:#111d30;border:1px solid #2c405b;border-radius:12px;margin-top:18px}.status-actions:before{content:"Mover a";width:100%;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.move-button{background:#263a55;color:#dce7f5;padding:8px 11px;font-size:11px}.move-button:hover{background:#365171}.move-button.current{display:none}
+${boardDeleteStyles('mejoras')}${boardCardInteractionStyles('default')}${boardSubstatusStyles()}${boardTaskDetailStyles('default')}${taskDependencyGateStyles()}.status-actions{display:flex;gap:7px;flex-wrap:wrap;padding:13px;background:#111d30;border:1px solid #2c405b;border-radius:12px;margin-top:18px}.status-actions:before{content:"Mover a";width:100%;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.move-button{background:#263a55;color:#dce7f5;padding:8px 11px;font-size:11px}.move-button:hover{background:#365171}.move-button.current{display:none}
 .modal{display:none;position:fixed;inset:0;background:#020713d9;align-items:center;justify-content:center;padding:20px;z-index:10;backdrop-filter:blur(5px)}.modal.open{display:flex}.panel{background:#142238;border:1px solid #405674;border-radius:18px;max-width:980px;width:100%;max-height:90vh;overflow:auto;padding:0;box-shadow:0 24px 80px #0009}.panel-header{position:sticky;top:0;z-index:2;padding:24px 28px 20px;background:#142238ee;border-bottom:1px solid #2c405b;backdrop-filter:blur(12px)}.panel-header h2{margin:8px 40px 8px 0;font-size:24px;line-height:1.25}.close{position:absolute;right:20px;top:18px;background:#24364e;border:0;border-radius:10px;color:#b8c5d6;font-size:22px;width:38px;height:38px;cursor:pointer}.meta{display:flex;gap:8px;flex-wrap:wrap;margin:0}.detail-file{color:#7689a2;font-size:11px}.panel-body{padding:24px 28px 30px}.source-editor{width:100%;min-height:360px;background:#0b1524;border:1px solid #344a67;border-radius:12px;color:#e8eef8;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:14px;resize:vertical}.source-editor:focus{outline:2px solid #73d8c6;outline-offset:2px}.edit-hint{color:#8da0b9;font-size:12px;margin:0 0 10px}.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.badge{background:#183d42;color:#80e2d0}.error{color:#fecaca;min-height:18px}
 @media(max-width:1250px){.board{grid-template-columns:repeat(2,minmax(280px,1fr))}}@media(max-width:700px){body{padding:18px}.board{grid-template-columns:1fr}.toolbar,.next-up{align-items:stretch;flex-direction:column}.next-number{flex-basis:48px}.search{max-width:none}.panel-header,.panel-body{padding-left:18px;padding-right:18px}}
 </style>
@@ -1893,8 +1331,8 @@ document.querySelector('.close').onclick=()=>modal.classList.remove('open');moda
 
 async function handle(req, res) {
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
-  res.setHeader('access-control-allow-headers', 'content-type');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PATCH,OPTIONS');
+  res.setHeader('access-control-allow-headers', 'content-type, if-match');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     return res.end();
@@ -1902,34 +1340,153 @@ async function handle(req, res) {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   if (req.method === 'GET' && url.pathname === '/api/projects') return json(res, 200, readCatalog().map(summarize));
   if (req.method === 'GET' && url.pathname === '/api/hub-config') {
+    const hubApiBase = `http://${HOST}:${PORT}`;
+    const sampleSlug = readCatalog()[0]?.slug || 'ariadne';
     return json(res, 200, {
       ganttBaseUrl: GANTT_BASE_URL,
       hubPort: PORT,
       boardPort: BOARD_PORT,
+      hubApiBase,
+      ganttLaunchExample: buildGanttLaunchUrl(GANTT_BASE_URL, sampleSlug),
+      ganttUi: buildHubGanttUiConfig({
+        hubApiBase,
+        ganttBaseUrl: GANTT_BASE_URL,
+        hubPort: PORT,
+        boardPort: BOARD_PORT,
+      }),
     });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/gantt-ui-contract') {
+    const hubApiBase = `http://${HOST}:${PORT}`;
+    return json(res, 200, buildHubGanttUiConfig({
+      hubApiBase,
+      ganttBaseUrl: GANTT_BASE_URL,
+      hubPort: PORT,
+      boardPort: BOARD_PORT,
+    }));
+  }
+  if (req.method === 'GET' && url.pathname === '/api/gantt/portfolio') {
+    try {
+      const portfolio = buildPortfolioGantt(ganttOptionsFromRequest(url, null));
+      return json(res, 200, portfolio);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
   }
   const gantt = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt$/);
   if (req.method === 'GET' && gantt) {
     const project = readCatalog().find((item) => item.slug === gantt[1]);
     if (!project) return json(res, 404, { error: 'project not found' });
-    const config = readAiCapacityConfig(project);
-    const queryCapacity = url.searchParams.get('capacity');
-    const capacity = queryCapacity
-      ? Number(queryCapacity || '2')
-      : effectiveCapacityFromConfig(config, 2);
-    const includeDone = url.searchParams.get('includeDone') !== '0';
-    const iaHoursPerDay = Number(url.searchParams.get('iaHoursPerDay') || '8');
-    const startDate = url.searchParams.get('startDate') || '';
-    const holidays = (url.searchParams.get('holidays') || '').split(',').map((item) => item.trim()).filter(Boolean);
-    const workOnSaturday = url.searchParams.get('workOnSaturday') === '1';
-    return json(res, 200, buildProjectGantt(project, {
-      capacity,
-      includeDone,
-      iaHoursPerDay,
-      startDate,
-      holidays,
-      workOnSaturday,
-    }));
+    return json(res, 200, buildProjectGantt(project, ganttOptionsFromRequest(url, project)));
+  }
+  const ganttMetrics = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/metrics$/);
+  if (req.method === 'GET' && ganttMetrics) {
+    const project = readCatalog().find((item) => item.slug === ganttMetrics[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (!fs.existsSync(project.path)) return json(res, 404, { error: 'project path missing' });
+    try {
+      const metrics = buildProjectGanttMetrics(project, {
+        ...ganttOptionsFromRequest(url, project),
+        includeDone: url.searchParams.get('includeDone') !== '0',
+      });
+      return json(res, 200, { project: project.slug, metrics });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  const ganttBaselines = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/baselines$/);
+  if (ganttBaselines) {
+    const project = readCatalog().find((item) => item.slug === ganttBaselines[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (req.method === 'GET') {
+      return json(res, 200, { project: project.slug, baselines: listBaselines(project) });
+    }
+    if (req.method === 'POST') {
+      try {
+        const data = await body(req);
+        const baseline = createProjectBaseline(
+          project,
+          data || {},
+          { ...ganttOptionsFromRequest(url, project), ...(data?.ganttOptions || {}) },
+        );
+        return json(res, 201, { project: project.slug, baseline });
+      } catch (error) {
+        const statusCode = /ya existe|inmutable/i.test(error.message) ? 409 : 400;
+        return json(res, statusCode, { error: error.message });
+      }
+    }
+  }
+  const ganttBaselineCompare = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/baselines\/([^/]+)\/compare$/);
+  if (req.method === 'GET' && ganttBaselineCompare) {
+    const project = readCatalog().find((item) => item.slug === ganttBaselineCompare[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const report = compareProjectBaseline(
+        project,
+        decodeURIComponent(ganttBaselineCompare[2]),
+        ganttOptionsFromRequest(url, project),
+      );
+      return json(res, 200, report);
+    } catch (error) {
+      const statusCode = /no encontrada/i.test(error.message) ? 404 : 400;
+      return json(res, statusCode, { error: error.message });
+    }
+  }
+  const ganttBaselineOne = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/baselines\/([^/]+)$/);
+  if (req.method === 'GET' && ganttBaselineOne) {
+    const project = readCatalog().find((item) => item.slug === ganttBaselineOne[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const baseline = readBaselineFile(project, decodeURIComponent(ganttBaselineOne[2]));
+      return json(res, 200, { project: project.slug, baseline });
+    } catch (error) {
+      const statusCode = /no encontrada/i.test(error.message) ? 404 : 400;
+      return json(res, statusCode, { error: error.message });
+    }
+  }
+  const ganttWhatIf = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/what-if$/);
+  if (req.method === 'POST' && ganttWhatIf) {
+    const project = readCatalog().find((item) => item.slug === ganttWhatIf[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (!fs.existsSync(project.path)) return json(res, 404, { error: 'project path missing' });
+    try {
+      const data = await body(req);
+      const ganttOptions = {
+        ...ganttOptionsFromRequest(url, project),
+        ...(data?.ganttOptions || {}),
+      };
+      const tasks = projectTasks(project);
+      const result = runWhatIfScenario(
+        tasks,
+        { slug: project.slug, name: project.name },
+        ganttOptions,
+        data || {},
+      );
+      let adopted = null;
+      if (data?.confirmAdopt) {
+        const token = String(data.confirmToken || data.confirm || '').trim();
+        if (token !== 'ADOPT') {
+          return json(res, 400, { error: 'confirmAdopt requires confirmToken: ADOPT' });
+        }
+        const patches = data.taskPatches || data.tasks || [];
+        adopted = [];
+        for (const patch of patches) {
+          if (!patch?.id) continue;
+          adopted.push(patchProjectTask(project, patch.id, patch));
+        }
+        result.persisted = adopted.length > 0;
+        result.adopted = adopted.map((row) => ({ id: row.id, changes: row.changes }));
+      }
+      const includePlans = data?.includePlans === true;
+      const { currentPlan, scenarioPlan, ...payload } = result;
+      return json(res, 200, {
+        project: project.slug,
+        ...payload,
+        ...(includePlans ? { currentPlan, scenarioPlan } : {}),
+      });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
   }
   const aiCapacity = url.pathname.match(/^\/api\/projects\/([^/]+)\/ai-capacity-config$/);
   if (req.method === 'GET' && aiCapacity) {
@@ -2023,6 +1580,23 @@ async function handle(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  const patchTask = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/([^/]+)$/);
+  if (req.method === 'PATCH' && patchTask) {
+    const project = readCatalog().find((item) => item.slug === patchTask[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const ifMatch = String(req.headers['if-match'] || '').trim();
+      const updated = patchProjectTask(project, decodeURIComponent(patchTask[2]), {
+        ...(data || {}),
+        ifMatch: ifMatch || data?.ifMatch || data?.expectedHash,
+      });
+      return json(res, 200, updated);
+    } catch (error) {
+      const statusCode = /conflicto de edición/i.test(error.message) ? 409 : 400;
+      return json(res, statusCode, { error: error.message });
+    }
+  }
   const taskDependencies = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/dependencies$/);
   if (req.method === 'POST' && taskDependencies) {
     const project = readCatalog().find((item) => item.slug === taskDependencies[1]);
@@ -2050,7 +1624,7 @@ async function handle(req, res) {
 
 async function handleBoard(req, res) {
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PATCH,OPTIONS');
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -2099,7 +1673,9 @@ async function handleBoard(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/tasks/checklist') {
     try {
       const data = await body(req);
-      const updated = updateTaskChecklist(project, data.id, Number(data.index), Boolean(data.checked));
+      const updated = updateTaskChecklist(project, data.id, Number(data.index), Boolean(data.checked), {
+        applySuggestedProgress: Boolean(data.applySuggestedProgress),
+      });
       return json(res, 200, updated);
     } catch (error) {
       return json(res, 400, { error: error.message });
@@ -2217,4 +1793,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, buildProjectGanttMetrics, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask, createProjectBaseline, compareProjectBaseline, listBaselines, readBaselineFile };

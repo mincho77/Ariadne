@@ -1,0 +1,18 @@
+{
+  "options": {
+    "capacity": 2,
+    "includeDone": false,
+    "startDate": "2026-08-04",
+    "iaHoursPerDay": 8
+  },
+  "expect": {
+    "pendingTasks": 3,
+    "cycleDetected": false,
+    "order": [
+      "GT-E-1",
+      "GT-E-2",
+      "GT-E-3"
+    ],
+    "minEdges": 2
+  }
+}

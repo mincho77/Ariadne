@@ -11,6 +11,9 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
+    "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
+    "gantt:audit": "node scripts/gantt-backlog-audit.js --all",
+    "smoke:cloud": "node --test tests/cloud-dev-smoke.test.js",
     "task:create": "node scripts/create-task.js",
     "bug:create": "node scripts/create-task.js",
     "queue:bugs": "node scripts/bug-queue-runner.js",
@@ -22,6 +25,7 @@
     "release:bundle": "npm run release:check:standalone && node scripts/create-standalone-bundle.js"
   },
   "dependencies": {
-    "backlog.md": "latest"
+    "backlog.md": "latest",
+    "yaml": "^2.7.0"
   }
 }

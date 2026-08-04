@@ -1,0 +1,79 @@
+{
+  "scenarios": [
+    {
+      "id": "fs-chain",
+      "dir": "fs-chain",
+      "description": "Linear FS chain schedules in order"
+    },
+    {
+      "id": "capacity-parallel",
+      "dir": "capacity-parallel",
+      "description": "Capacity 2 allows parallel start for independent tasks"
+    },
+    {
+      "id": "relations-lag",
+      "dir": "relations-lag",
+      "description": "FS SS FF SF with positive lag"
+    },
+    {
+      "id": "missing-dependency",
+      "dir": "missing-dependency",
+      "description": "Unknown predecessor increments unresolvedDependencies"
+    },
+    {
+      "id": "cycle-detected",
+      "dir": "cycle-detected",
+      "description": "Mutual dependency marks cycleDetected"
+    },
+    {
+      "id": "bugs-lanes",
+      "dir": "bugs-lanes",
+      "description": "Bug vs enhancement lanes"
+    },
+    {
+      "id": "queue-ordinal",
+      "dir": "queue-ordinal",
+      "description": "Equal priority tasks defer to ordinal in queue"
+    },
+    {
+      "id": "colombia-holiday",
+      "dir": "colombia-holiday",
+      "description": "Start on holiday skips to next working day"
+    },
+    {
+      "id": "not-before",
+      "dir": "not-before",
+      "description": "not_before pushes scheduled start later"
+    },
+    {
+      "id": "deadline-violation",
+      "dir": "deadline-violation",
+      "description": "Short deadline marks violation in diagnostics"
+    },
+    {
+      "id": "doing-first",
+      "dir": "doing-first",
+      "description": "In Progress consumes capacity; Queue before To Do"
+    },
+    {
+      "id": "lane-capacity",
+      "dir": "lane-capacity",
+      "description": "Split bugs/enhancements lane capacity"
+    },
+    {
+      "id": "temporal-block",
+      "dir": "temporal-block",
+      "description": "Temporal blocks delay start or mark low-confidence forecast"
+    },
+    {
+      "id": "phases-milestones",
+      "dir": "phases-milestones",
+      "description": "Parent-child hierarchy and zero-duration milestones"
+    },
+    {
+      "id": "resource-pool-capacity",
+      "dir": "resource-pool-capacity",
+      "description": "Resource pool maxParallel serializes despite global capacity 2"
+    }
+  ]
+}

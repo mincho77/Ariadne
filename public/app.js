@@ -42,6 +42,50 @@ async function load() {
   });
 }
 
+function formatConfidenceLabel(level) {
+  if (level === 'low') return 'Confianza baja';
+  if (level === 'medium') return 'Confianza media';
+  return 'Confianza alta';
+}
+
+function formatVariance(days) {
+  if (days == null || !Number.isFinite(days)) return null;
+  if (days === 0) return 'Sin variación vs baseline';
+  const sign = days > 0 ? '+' : '';
+  return `${sign}${days}d vs baseline`;
+}
+
+function ganttMetricsHtml(metrics) {
+  if (!metrics) {
+    return `<section class="lane lane-gantt" aria-label="Seguimiento Gantt">
+      <div class="lane-head">
+        <span class="lane-label">Seguimiento</span>
+      </div>
+      <p class="lane-meta">Sin pronóstico disponible</p>
+    </section>`;
+  }
+
+  const confidence = metrics.forecastConfidence || 'high';
+  const finish = metrics.forecastFinishDate || '—';
+  const completion = metrics.completionRate != null ? `${metrics.completionRate}% completado` : '';
+  const variance = formatVariance(metrics.finishVarianceDays ?? metrics.pendingDaysDelta);
+  const risks = [];
+  if (metrics.deadlineAtRisk > 0) risks.push(`${metrics.deadlineAtRisk} deadline${metrics.deadlineAtRisk === 1 ? '' : 's'} en riesgo`);
+  if (metrics.blockedTasks > 0) risks.push(`${metrics.blockedTasks} bloqueo${metrics.blockedTasks === 1 ? '' : 's'}`);
+  if (metrics.slippedTasks > 0) risks.push(`${metrics.slippedTasks} atraso${metrics.slippedTasks === 1 ? '' : 's'}`);
+  if (metrics.cycleDetected) risks.push('ciclo detectado');
+
+  return `<section class="lane lane-gantt" aria-label="Seguimiento Gantt">
+    <div class="lane-head">
+      <span class="lane-label">Seguimiento</span>
+      <span class="confidence-pill ${escapeHtml(confidence)}">${escapeHtml(formatConfidenceLabel(confidence))}</span>
+    </div>
+    <p class="lane-meta">Fin pronóstico: <strong>${escapeHtml(finish)}</strong>${completion ? ` · ${escapeHtml(completion)}` : ''}</p>
+    <p class="lane-meta">${variance ? escapeHtml(variance) : 'Sin baseline para comparar'}${metrics.forecastPendingDays != null ? ` · ${metrics.forecastPendingDays}d pendientes` : ''}</p>
+    <p class="lane-next"><em>Riesgos</em>${escapeHtml(risks.length ? risks.join(' · ') : 'Sin alertas activas')}</p>
+  </section>`;
+}
+
 function card(p) {
   const bugsOpen = Number(p.bugsOpen ?? 0);
   const improvementsTotal = Number(p.improvements ?? p.tasks ?? 0);
@@ -85,6 +129,7 @@ function card(p) {
         <button data-board="${escapeHtml(p.slug)}" data-view="mejoras" class="lane-action${mejoraActionClass}">Abrir mejoras</button>
       </section>
     </div>
+    ${ganttMetricsHtml(p.ganttMetrics)}
     <div class="card-actions">
       <button data-gantt="${escapeHtml(p.slug)}" class="btn-gantt">Abrir Gantt</button>
     </div>

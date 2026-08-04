@@ -1,4 +1,4 @@
-const test = require('node:test'); const assert = require('node:assert/strict'); const { once } = require('node:events'); const { spawn } = require('node:child_process'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, updateTaskDependencies, projectTasks, buildProjectGantt } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+const test = require('node:test'); const assert = require('node:assert/strict'); const { once } = require('node:events'); const { spawn } = require('node:child_process'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, updateTaskDependencies, projectTasks, buildProjectGantt, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, updateTaskChecklist } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
 
 async function reservePort() {
   const net = require('node:net');
@@ -65,6 +65,43 @@ function createAiCapacityHttpSandbox(prefix = 'ariadne-http-ai-capacity-') {
   fs.mkdirSync(tasksDir, { recursive: true });
   fs.writeFileSync(path.join(tasksDir, 'jm-e-1 - One.md'), '---\nid: JM-E-1\ntitle: One\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 2\n---\n');
   fs.writeFileSync(path.join(tasksDir, 'jm-e-2 - Two.md'), '---\nid: JM-E-2\ntitle: Two\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 2\n---\n');
+  const catalogPath = path.join(sandbox, 'projects.json');
+  fs.writeFileSync(catalogPath, `${JSON.stringify([
+    {
+      slug: 'demo-http',
+      name: 'Demo HTTP',
+      path: projectRoot,
+      port: 6521,
+    },
+  ], null, 2)}\n`);
+  return { sandbox, projectRoot, tasksDir, catalogPath };
+}
+
+function createPatchHttpSandbox(prefix = 'ariadne-http-patch-') {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const projectRoot = path.join(sandbox, 'project');
+  const tasksDir = path.join(projectRoot, 'backlog', 'tasks');
+  fs.mkdirSync(tasksDir, { recursive: true });
+  fs.writeFileSync(path.join(tasksDir, 'ah-e-1 - Demo.md'), '---\nid: AH-E-1\ntitle: Demo\nstatus: To Do\npriority: Medium\ntype: task\nupdated_date: \'2026-08-04 10:00\'\n---\n\n## Description\n\nHola\n');
+  const catalogPath = path.join(sandbox, 'projects.json');
+  fs.writeFileSync(catalogPath, `${JSON.stringify([
+    {
+      slug: 'demo-http',
+      name: 'Demo HTTP',
+      path: projectRoot,
+      port: 6521,
+    },
+  ], null, 2)}\n`);
+  return { sandbox, projectRoot, tasksDir, catalogPath };
+}
+
+function createBaselineHttpSandbox(prefix = 'ariadne-http-baseline-') {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const projectRoot = path.join(sandbox, 'project');
+  const tasksDir = path.join(projectRoot, 'backlog', 'tasks');
+  fs.mkdirSync(tasksDir, { recursive: true });
+  fs.writeFileSync(path.join(tasksDir, 'ah-e-1 - One.md'), '---\nid: AH-E-1\ntitle: One\nstatus: To Do\npriority: Medium\ntype: task\nestimate_days: 2\n---\n');
+  fs.writeFileSync(path.join(tasksDir, 'ah-e-2 - Two.md'), '---\nid: AH-E-2\ntitle: Two\nstatus: To Do\npriority: Medium\ntype: task\nestimate_days: 2\n---\n');
   const catalogPath = path.join(sandbox, 'projects.json');
   fs.writeFileSync(catalogPath, `${JSON.stringify([
     {
@@ -294,7 +331,7 @@ test('updateTaskDependencies persists typed relation tokens in frontmatter', () 
   assert.equal(updated.dependencyLinks?.[0]?.lagIaHours, 8);
 
   const source = fs.readFileSync(path.join(dir, 'jm-e-2 - Child.md'), 'utf8');
-  assert.match(source, /dependencies:\n\s+- JM-E-1:FF\+1d/);
+  assert.match(source, /dependencies:[\s\S]*JM-E-1:FF\+1d/);
 });
 
 test('dependencies endpoint persists typed tokens over HTTP', { timeout: 20000 }, async () => {
@@ -319,7 +356,7 @@ test('dependencies endpoint persists typed tokens over HTTP', { timeout: 20000 }
     assert.equal(payload.dependencyLinks?.[0]?.lagIaHours, 2);
 
     const source = fs.readFileSync(path.join(tasksDir, 'jm-e-2 - Child.md'), 'utf8');
-    assert.match(source, /dependencies:\n\s+- JM-E-1:SS\+2h/);
+    assert.match(source, /dependencies:[\s\S]*JM-E-1:SS\+2h/);
   } finally {
     await stopProcess(child);
   }
@@ -533,4 +570,335 @@ test('gantt uses effective capacity from saved ai-capacity config when capacity 
   } finally {
     await stopProcess(child);
   }
+});
+
+test('patchProjectTask updates temporal fields and preserves markdown body', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-patch-local-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, '---\nid: AH-E-1\ntitle: Demo\nstatus: To Do\npriority: Medium\ntype: task\n---\n\n## Description\n\nCuerpo\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  const updated = patchProjectTask(project, 'AH-E-1', {
+    patch: { actual_start: '2026-08-04', progress: 40 },
+  });
+
+  assert.equal(updated.changes.includes('actual_start'), true);
+  assert.equal(updated.changes.includes('progress'), true);
+  const source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /actual_start: '2026-08-04'/);
+  assert.match(source, /progress: 40/);
+  assert.match(source, /## Description/);
+  assert.match(source, /Cuerpo/);
+});
+
+test('patchProjectTask rejects hash conflict', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-patch-conflict-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  const original = '---\nid: AH-E-1\ntitle: Demo\nstatus: To Do\npriority: Medium\ntype: task\n---\n';
+  fs.writeFileSync(file, original);
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  assert.throws(
+    () => patchProjectTask(project, 'AH-E-1', {
+      patch: { progress: 10 },
+      expectedHash: 'deadbeefdeadbeef',
+    }),
+    /conflicto de edición/i,
+  );
+});
+
+test('applyKanbanTemporalSync records actual dates without destroying history on reopen', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-kanban-sync-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, '---\nid: AH-E-1\ntitle: Demo\nstatus: To Do\npriority: Medium\ntype: task\n---\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  applyKanbanTemporalSync(project, 'AH-E-1', 'To Do', 'In Progress');
+  let source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /actual_start: '\d{4}-\d{2}-\d{2}'/);
+
+  applyTaskStateFallback(project, 'AH-E-1', 'Done', false);
+  applyKanbanTemporalSync(project, 'AH-E-1', 'In Progress', 'Done');
+  source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /actual_finish: '\d{4}-\d{2}-\d{2}'/);
+  assert.match(source, /progress: 100/);
+
+  applyTaskStateFallback(project, 'AH-E-1', 'In Progress', false);
+  applyKanbanTemporalSync(project, 'AH-E-1', 'Done', 'In Progress');
+  source = fs.readFileSync(file, 'utf8');
+  const startMatches = source.match(/actual_start: '([^']+)'/g) || [];
+  const finishMatches = source.match(/actual_finish: '([^']+)'/g) || [];
+  assert.equal(startMatches.length, 1);
+  assert.equal(finishMatches.length, 1);
+});
+
+test('PATCH task endpoint updates fields over HTTP', { timeout: 20000 }, async () => {
+  const { tasksDir, catalogPath } = createPatchHttpSandbox('ariadne-http-patch-ok-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const source = fs.readFileSync(path.join(tasksDir, 'ah-e-1 - Demo.md'), 'utf8');
+    const hash = computeSourceHash(source);
+    const response = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/AH-E-1`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'if-match': hash },
+      body: JSON.stringify({ actual_start: '2026-08-04', progress: 55 }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.id, 'AH-E-1');
+    assert.equal(payload.changes.includes('actual_start'), true);
+    assert.match(payload.sourceHash, /^[a-f0-9]{16}$/);
+
+    const updated = fs.readFileSync(path.join(tasksDir, 'ah-e-1 - Demo.md'), 'utf8');
+    assert.match(updated, /actual_start: '2026-08-04'/);
+    assert.match(updated, /progress: 55/);
+    assert.match(updated, /## Description/);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('PATCH task endpoint returns 409 on stale hash', { timeout: 20000 }, async () => {
+  const { catalogPath } = createPatchHttpSandbox('ariadne-http-patch-stale-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/AH-E-1`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'if-match': '0000000000000000' },
+      body: JSON.stringify({ progress: 10 }),
+    });
+    assert.equal(response.status, 409);
+    const payload = await response.json();
+    assert.match(String(payload.error || ''), /conflicto de edición/i);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('updateTaskStatus blocks In Progress when FS predecessor is open', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-dep-gate-status-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'gt-e-1 - Base.md'), '---\nid: GT-E-1\ntitle: Base\nstatus: To Do\npriority: Medium\ntype: feature\n---\n');
+  fs.writeFileSync(path.join(dir, 'gt-e-2 - Child.md'), '---\nid: GT-E-2\ntitle: Child\nstatus: To Do\npriority: Medium\ntype: feature\ndependencies:\n  - GT-E-1:FS\n---\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  await assert.rejects(
+    async () => updateTaskStatus(project, 'GT-E-2', 'In Progress'),
+    /Dependencia FS pendiente/i,
+  );
+
+  applyTaskStateFallback(project, 'GT-E-1', 'Done', false);
+  const gate = evaluateDependencyGate(
+    projectTasks(project).find((task) => task.id === 'GT-E-2'),
+    projectTasks(project),
+    { policy: 'strict' },
+  );
+  assert.equal(gate.blocked, false);
+});
+
+test('evaluateDependencyGate is exposed from server helpers', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-dep-gate-helper-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'gt-e-1 - Base.md'), '---\nid: GT-E-1\ntitle: Base\nstatus: To Do\npriority: Medium\ntype: feature\n---\n');
+  fs.writeFileSync(path.join(dir, 'gt-e-2 - Child.md'), '---\nid: GT-E-2\ntitle: Child\nstatus: To Do\npriority: Medium\ntype: feature\ndependencies:\n  - GT-E-1\n---\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+  const tasks = projectTasks(project);
+  const gate = evaluateDependencyGate(tasks[1], tasks, { policy: 'strict' });
+  assert.equal(gate.blocked, true);
+});
+
+test('baseline API create, list, read and compare over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createBaselineHttpSandbox('ariadne-http-baseline-crud-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+  const ganttQuery = 'includeDone=0&iaHoursPerDay=8&startDate=2026-08-04&capacity=1';
+  const baselineId = 'bl-20260804-http-test-deadbeef';
+
+  try {
+    const create = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines?${ganttQuery}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'HTTP baseline', author: 'test-runner', id: baselineId }),
+    });
+    assert.equal(create.status, 201);
+    const created = await create.json();
+    assert.equal(created.baseline.id, baselineId);
+    assert.equal(created.baseline.name, 'HTTP baseline');
+    assert.equal(created.baseline.author, 'test-runner');
+    assert.ok(created.baseline.tasks.length >= 2);
+
+    const list = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines`);
+    assert.equal(list.status, 200);
+    const listBody = await list.json();
+    assert.ok(listBody.baselines.some((row) => row.id === baselineId));
+
+    const one = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines/${baselineId}`);
+    assert.equal(one.status, 200);
+    const oneBody = await one.json();
+    assert.equal(oneBody.baseline.id, baselineId);
+
+    const compare = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines/${baselineId}/compare?${ganttQuery}`);
+    assert.equal(compare.status, 200);
+    const compareBody = await compare.json();
+    assert.equal(compareBody.baselineId, baselineId);
+    assert.ok(Array.isArray(compareBody.tasks));
+    assert.equal(compareBody.summary.unchangedTasks, compareBody.tasks.filter((row) => row.change === 'unchanged').length);
+
+    const duplicate = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/baselines?${ganttQuery}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Duplicate', author: 'test-runner', id: baselineId }),
+    });
+    assert.equal(duplicate.status, 409);
+    const duplicateBody = await duplicate.json();
+    assert.match(String(duplicateBody.error || ''), /inmutable|ya existe/i);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('what-if API simulates without persisting and requires ADOPT token to adopt', { timeout: 20000 }, async () => {
+  const { catalogPath } = createBaselineHttpSandbox('ariadne-http-whatif-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+  const query = 'includeDone=0&iaHoursPerDay=8&startDate=2026-08-04&capacity=1';
+  try {
+    const sim = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/what-if?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label: 'Cap 2', overrides: { capacity: 2 } }),
+    });
+    assert.equal(sim.status, 200);
+    const body = await sim.json();
+    assert.equal(body.persisted, false);
+    assert.ok(body.comparison?.tasks);
+    assert.ok(body.metrics?.current);
+
+    const rejectAdopt = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/what-if?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        confirmAdopt: true,
+        taskPatches: [{ id: 'AH-E-1', estimate_days: 3 }],
+      }),
+    });
+    assert.equal(rejectAdopt.status, 400);
+
+    const adopt = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/what-if?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        confirmAdopt: true,
+        confirmToken: 'ADOPT',
+        taskPatches: [{ id: 'AH-E-1', estimate_days: 3 }],
+      }),
+    });
+    assert.equal(adopt.status, 200);
+    const adopted = await adopt.json();
+    assert.equal(adopted.persisted, true);
+    assert.ok(adopted.adopted?.some((row) => row.id === 'AH-E-1'));
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('portfolio API returns multi-project aggregate over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createBaselineHttpSandbox('ariadne-http-portfolio-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/gantt/portfolio?includeDone=0&startDate=2026-08-04&capacity=1`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.summary.projectCount >= 1);
+    assert.ok(Array.isArray(body.projects));
+    assert.ok(Array.isArray(body.milestones));
+    assert.ok(Array.isArray(body.crossProjectDependencies));
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('updateTaskChecklist suggests progress without overwriting remaining or progress by default', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-checklist-suggest-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, `---
+id: AH-E-1
+title: Demo
+status: In Progress
+priority: Medium
+type: task
+progress: 25
+remaining_ia_hours: 6
+---
+
+## Acceptance Criteria
+- [ ] #1 Uno
+- [x] #2 Dos
+`);
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  const result = updateTaskChecklist(project, 'AH-E-1', 0, true);
+  assert.equal(result.suggestedProgress, 100);
+  assert.equal(result.progressApplied, false);
+  assert.equal(result.remainingPreserved, true);
+  const source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /progress: 25/);
+  assert.match(source, /remaining_ia_hours: 6/);
+});
+
+test('updateTaskChecklist can apply suggested progress when authorized', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-checklist-apply-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, `---
+id: AH-E-1
+title: Demo
+status: In Progress
+priority: Medium
+type: task
+remaining_ia_hours: 6
+---
+
+## Acceptance Criteria
+- [x] #1 Uno
+- [x] #2 Dos
+`);
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  const result = updateTaskChecklist(project, 'AH-E-1', 1, true, { applySuggestedProgress: true });
+  assert.equal(result.suggestedProgress, 100);
+  assert.equal(result.progressApplied, true);
+  assert.equal(result.remainingPreserved, true);
+  const source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /progress: 100/);
+  assert.match(source, /remaining_ia_hours: 6/);
+});
+
+test('patchProjectTask allows progress edits on In Progress tasks', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-progress-doing-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'ah-e-1 - Demo.md');
+  fs.writeFileSync(file, '---\nid: AH-E-1\ntitle: Demo\nstatus: In Progress\npriority: Medium\ntype: task\nestimate_ia_hours: 10\n---\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  patchProjectTask(project, 'AH-E-1', { patch: { progress: 60, remaining_ia_hours: 4 } });
+  const source = fs.readFileSync(file, 'utf8');
+  assert.match(source, /progress: 60/);
+  assert.match(source, /remaining_ia_hours: 4/);
+  const plan = buildProjectGantt(project, { capacity: 1, includeDone: false, startDate: '2026-08-04' });
+  const task = plan.tasks.find((item) => item.id === 'AH-E-1');
+  assert.equal(task.durationIaHours, 4);
+  assert.equal(task.progress, 60);
 });

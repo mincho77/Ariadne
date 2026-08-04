@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Portafolio Gantt · Ariadne</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <header class="hub-header">
+      <div>
+        <p class="eyebrow"><a href="/" class="nav-link">← Proyectos</a></p>
+        <h1>Portafolio Gantt</h1>
+        <p class="lede">Vista multiproyecto: hitos, riesgos, capacidad y dependencias cross-project.</p>
+      </div>
+      <button id="refresh" class="btn-primary" type="button">Actualizar</button>
+    </header>
+    <section id="summary" class="portfolio-summary" aria-live="polite"></section>
+    <section id="projects" class="portfolio-grid"></section>
+    <section id="milestones-wrap">
+      <h2 class="section-title">Hitos</h2>
+      <div id="milestones" class="portfolio-table-wrap"></div>
+    </section>
+    <section id="cross-wrap">
+      <h2 class="section-title">Dependencias cross-project</h2>
+      <div id="cross" class="portfolio-table-wrap"></div>
+    </section>
+  </main>
+  <script src="/portfolio.js"></script>
+</body>
+</html>

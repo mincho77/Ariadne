@@ -1,0 +1,13 @@
+{
+  "options": {
+    "capacity": 2,
+    "includeDone": false,
+    "startDate": "2026-08-04"
+  },
+  "expect": {
+    "lanes": {
+      "GT-B-1": "bugs",
+      "GT-E-1": "mejoras"
+    }
+  }
+}
