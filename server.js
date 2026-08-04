@@ -21,6 +21,7 @@ const {
 const { boardColumns, STATUS_DISPLAY } = require('./board-columns');
 const { createTaskFile, projectTaskCode, formatTaskId, parseTypedTaskId } = require('./task-ids');
 const { normalizeProjectTaskIds } = require('./task-id-normalize');
+const { bugQueueState, bugRunPacket, buildBugRunInstruction } = require('./bug-queue');
 const {
   isTaskDeletable,
   boardDeleteButton,
@@ -449,6 +450,102 @@ function createTask(project, options = {}) {
   return { ...parsed, file: created.file, source: created.source };
 }
 
+function getBugQueueSnapshot(project) {
+  const state = bugQueueState(projectTasks(project), isBugTask);
+  return {
+    project: project.slug,
+    queueLength: state.queueLength,
+    active: state.active ? {
+      id: state.active.id,
+      title: state.active.title,
+      status: state.active.status,
+      priority: state.active.priority,
+      file: state.active.file,
+    } : null,
+    next: state.next ? {
+      id: state.next.id,
+      title: state.next.title,
+      status: state.next.status,
+      priority: state.next.priority,
+      file: state.next.file,
+      instruction: buildBugRunInstruction(state.next, project),
+    } : null,
+    queued: state.queued.map((task) => ({
+      id: task.id,
+      title: task.title,
+      priority: task.priority,
+      ordinal: task.ordinal,
+    })),
+  };
+}
+
+async function enqueueTask(project, taskId) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+  if (task.status.toLowerCase() === 'queued') return task;
+  return updateTaskStatus(project, task.id, 'Queued');
+}
+
+async function createBugTask(project, options = {}) {
+  const created = createTask(project, {
+    ...options,
+    type: options.type || 'bug',
+    labels: Array.isArray(options.labels) ? options.labels : ['bug'],
+  });
+  const shouldQueue = options.queue !== false;
+  if (!isBugTask(created)) {
+    throw new Error('createBugTask requires a bug task');
+  }
+  if (shouldQueue) {
+    await enqueueTask(project, created.id);
+  }
+  const refreshed = findTask(project, created.id);
+  let run = null;
+  let started = false;
+  if (shouldQueue && options.start !== false) {
+    const state = bugQueueState(projectTasks(project), isBugTask);
+    if (!state.active && state.next?.id === refreshed.id) {
+      run = await claimNextBug(project);
+      writeBugRunPacket(project, run);
+      started = true;
+    }
+  }
+  return {
+    ...refreshed,
+    queued: shouldQueue,
+    started,
+    run,
+    instruction: buildBugRunInstruction(refreshed, project),
+  };
+}
+
+async function claimNextBug(project) {
+  const state = bugQueueState(projectTasks(project), isBugTask);
+  if (state.active) {
+    const err = new Error('ya hay un bug en ejecución');
+    err.code = 'ACTIVE_BUG';
+    err.active = state.active;
+    throw err;
+  }
+  if (!state.next) {
+    const err = new Error('la cola de bugs está vacía');
+    err.code = 'EMPTY_QUEUE';
+    throw err;
+  }
+  await updateTaskStatus(project, state.next.id, 'In Progress');
+  const task = findTask(project, state.next.id);
+  return bugRunPacket(task, project);
+}
+
+function writeBugRunPacket(project, packet) {
+  const dir = path.join(project.path, '.ariadne', 'bug-queue');
+  fs.mkdirSync(dir, { recursive: true });
+  const target = path.join(dir, 'current.json');
+  fs.writeFileSync(target, `${JSON.stringify(packet, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(path.join(dir, 'current.md'), `${packet.instruction}\n`, 'utf8');
+  return target;
+}
+
 function ensureProjectTaskIds(project) {
   const preview = normalizeProjectTaskIds(project, { parseTask, apply: false });
   if (!preview.needsFix) return null;
@@ -757,10 +854,44 @@ async function handleBoard(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  if (req.method === 'GET' && url.pathname === '/api/queue/bugs') {
+    return json(res, 200, getBugQueueSnapshot(project));
+  }
+  if (req.method === 'POST' && url.pathname === '/api/queue/bugs/claim') {
+    try {
+      const packet = await claimNextBug(project);
+      const runFile = writeBugRunPacket(project, packet);
+      return json(res, 200, { ...packet, runFile });
+    } catch (error) {
+      if (error.code === 'ACTIVE_BUG') {
+        return json(res, 409, { error: error.message, active: error.active });
+      }
+      if (error.code === 'EMPTY_QUEUE') {
+        return json(res, 404, { error: error.message });
+      }
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/tasks/create') {
     try {
       const data = await body(req);
+      const isBug = data.type === 'bug'
+        || (Array.isArray(data.labels) && data.labels.some((label) => String(label).toLowerCase() === 'bug'))
+        || /^bug\b/i.test(String(data.title || ''));
+      if (isBug && data.queue !== false) {
+        const created = await createBugTask(project, data);
+        return json(res, 201, created);
+      }
       const created = createTask(project, data);
+      return json(res, 201, created);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/bugs/create') {
+    try {
+      const data = await body(req);
+      const created = await createBugTask(project, data);
       return json(res, 201, created);
     } catch (error) {
       return json(res, 400, { error: error.message });
@@ -826,4 +957,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, createTask, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction };

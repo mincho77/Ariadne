@@ -52,7 +52,32 @@ npm run task:create -- ariadne --enhancement "HUB · Auditoría multiproyecto"
 
 Desde el tablero Kanban también puedes usar **+ New bug** o **+ New enhancement**.
 
-Crear tarea vía API:
+Crear bug desde afuera (entra a Queue y arranca si no hay otro activo):
+
+```bash
+curl -s -X POST 'http://127.0.0.1:6421/api/bugs/create?project=jurismate' \
+  -H 'content-type: application/json' \
+  -d '{"title":"BUG producción · Upload congela","priority":"Ultra High","description":"Detalle del incidente"}'
+```
+
+Runner de cola de bugs (uno a uno):
+
+```bash
+npm run queue:bugs -- jurismate
+```
+
+Deja un runner activo en otra terminal. Cuando entra un bug:
+1. Se encola en **Queue** del tablero de bugs
+2. Si no hay otro bug en **Doing**, pasa a ejecución al instante
+3. Escribe la instrucción en `<proyecto>/.ariadne/bug-queue/current.md`
+
+Consultar cola:
+
+```bash
+curl -s 'http://127.0.0.1:6421/api/queue/bugs?project=jurismate'
+```
+
+Crear tarea genérica vía API:
 
 ```bash
 curl -s -X POST 'http://127.0.0.1:6421/api/tasks/create?project=jurismate' \
