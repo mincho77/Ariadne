@@ -14,6 +14,15 @@ npm install
 ```bash
 npm run smoke:cloud
 npm test
+npm run ariadne:audit   # all docs/plans ledgers + optional gantt backlog
+```
+
+### Lite vs full skill
+
+Simple backlog/ledger updates: **`skills/ariadne-lite/`** (`docs/ariadne-lite.md`).
+
+```bash
+npm run ariadne:route-hint -- "mueve tarea a cola"   # JSON hint for wrappers
 ```
 
 ### Run Hub locally (manual)

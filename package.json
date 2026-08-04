@@ -14,6 +14,8 @@
     "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
     "gantt:audit": "node scripts/gantt-backlog-audit.js --all",
     "smoke:cloud": "node --test tests/cloud-dev-smoke.test.js",
+    "ariadne:audit": "node scripts/ariadne-audit-all.js",
+    "ariadne:route-hint": "node scripts/ariadne-route-hint.js",
     "task:create": "node scripts/create-task.js",
     "bug:create": "node scripts/create-task.js",
     "queue:bugs": "node scripts/bug-queue-runner.js",
