@@ -4,8 +4,8 @@
 - Estado: en_progreso
 - Última actualización: 2026-08-04
 - Objetivo: administrar varios proyectos locales con tableros Markdown, reglas Ariadne y recuperación clara de trabajo.
-- Gate actual: repo standalone operativo; Kanban con edición, cola manual y módulo de bugs con analytics por tema.
-- Próxima acción: retomar ARLOCAL-025+ (JurisMate producción) o cerrar ledger local si el Hub queda en mantenimiento.
+- Gate actual: Hub standalone + Gantt + lite/sync; trabajo JurisMate en ARLOCAL-025+ (repo externo).
+- Próxima acción: retomar ARLOCAL-025+ en JurisMate o validación humana JM-41/JM-43.
 
 ## Alcance
 
@@ -128,7 +128,7 @@
 
 ## Historial
 
-- 2026-08-04: Route-hint launcher (`scripts/ariadne-launcher.js`, `docs/ariadne-launcher.md`); ARIM-003/004 hecho en ariadne-mejoras.
+- 2026-08-04: Cloud smoke ampliado (sync/launcher scripts); ledger ariadne-mejoras cerrado; AH-E-30 Done.
 - 2026-08-04: `npm run ariadne:audit:fix` corrige referencias obsoletas en columna Próxima acción; lib/ledger-hygiene.js integrado en audit-all.
 - 2026-08-04: ARLOCAL-010 cerrado con prueba HTTP multiproyecto (`tests/two-project-lifecycle.test.js`): crear, cola, In Progress, edición Markdown, bloqueo por subestado, reanudación y cierre en `proj-alpha` y `proj-beta` sin pérdida en disco; portafolio Gantt con dos proyectos; `npm test` 166/166.
 

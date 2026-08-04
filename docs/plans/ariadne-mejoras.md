@@ -1,11 +1,11 @@
 # Plan: Mejoras internas de Ariadne
 
 ## Control
-- Estado: en_progreso
+- Estado: **cerrado** (ARIM-001 … ARIM-005; modelo barato en Diferidos)
 - Última actualización: 2026-08-04
 - Objetivo: mantener una cola separada de mejoras para Ariadne, incluyendo ahorro de tokens, variantes livianas y automatizacion operativa sin mezclarlo con bugs productivos de JurisMate.
-- Gate actual: launcher in-repo + pipeline `npm run ariadne:sync`; modelo barato sigue diferido.
-- Próxima acción: usar `ariadne:sync` en hooks de agente; retomar ARIM-DEF-001 solo si Cursor expone modelo por skill.
+- Gate actual: **ARIM-001 … ARIM-005 hechas**; `npm run ariadne:sync` operativo.
+- Próxima acción: usar sync en agentes; reactivar ARIM-DEF-001 solo si Cursor expone modelo por skill.
 
 ## Alcance
 
@@ -70,6 +70,7 @@
 
 ## Historial
 
+- 2026-08-04: Programa cerrado — cloud smoke incluye sync/launcher; ARIM-DEF-001 único diferido activo.
 - 2026-08-04: ARIM-005 — `npm run ariadne:sync` (audit + fix opcional + check_plan); docs/ariadne-automation.md; ARIM-003/004 acotados (launcher in-repo, sin medicion tokens).
 - 2026-08-04: ARIM-003/004 — launcher + tests; modelo barato permanece en ARIM-DEF-001.
 - 2026-08-05: AH-E-5 — skill `ariadne-lite`, docs/ariadne-lite.md, route-hint CLI; ARIM-001/002 hecho.
