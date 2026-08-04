@@ -64,6 +64,11 @@
       "id": "temporal-block",
       "dir": "temporal-block",
       "description": "Temporal blocks delay start or mark low-confidence forecast"
+    },
+    {
+      "id": "phases-milestones",
+      "dir": "phases-milestones",
+      "description": "Parent-child hierarchy and zero-duration milestones"
     }
   ]
 }

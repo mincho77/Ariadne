@@ -84,3 +84,7 @@ Compare accepts the same query parameters as the Gantt endpoint (`capacity`, `st
 ## Temporal blocks (AH-E-21)
 
 Blocked tasks expose `forecastConfidence` and block metadata on `tasks[]`. See `docs/gantt-blocks.md`.
+
+## Hierarchy and milestones (AH-E-22)
+
+`milestones[]` and `hierarchy` document parent-child structure. See `docs/gantt-hierarchy.md`.

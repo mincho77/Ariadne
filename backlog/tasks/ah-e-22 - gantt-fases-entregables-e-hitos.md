@@ -1,10 +1,10 @@
 ---
 id: AH-E-22
 title: GANTT · Fases, entregables e hitos
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 21:30'
 labels:
   - gantt
   - fase-3
@@ -29,6 +29,6 @@ Soportar parent_id, release, workstream, hitos duración cero; IDs B/E existente
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Hitos visibles en API Gantt
-- [ ] #2 Jerarquía padre-hijo en JSON
+- [x] #1 Hitos visibles en API Gantt
+- [x] #2 Jerarquía padre-hijo en JSON
 <!-- AC:END -->

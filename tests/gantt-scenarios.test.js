@@ -135,6 +135,29 @@ for (const entry of manifest.scenarios) {
     if (expect.lowConfidenceForecasts != null) {
       assert.equal(plan.summary.lowConfidenceForecasts, expect.lowConfidenceForecasts);
     }
+    if (expect.milestoneCount != null) {
+      assert.equal(plan.summary.milestoneCount, expect.milestoneCount);
+      assert.equal(plan.milestones.length, expect.milestoneCount);
+    }
+    if (expect.hierarchyRoots != null) {
+      assert.equal(plan.summary.hierarchyRoots, expect.hierarchyRoots);
+      assert.equal(plan.hierarchy.roots.length, expect.hierarchyRoots);
+    }
+    if (expect.milestoneIds) {
+      assert.deepEqual(plan.milestones.map((item) => item.id).sort(), [...expect.milestoneIds].sort());
+    }
+    if (expect.hierarchyChildren) {
+      for (const [id, children] of Object.entries(expect.hierarchyChildren)) {
+        assert.deepEqual(plan.hierarchy.nodes[id]?.childrenIds, children);
+      }
+    }
+    if (expect.zeroDuration) {
+      for (const [id, zero] of Object.entries(expect.zeroDuration)) {
+        const task = plan.tasks.find((item) => item.id === id) || plan.milestones.find((item) => item.id === id);
+        assert.ok(task, `missing task ${id}`);
+        assert.equal(task.durationIaHours === 0, zero, `${id} duration`);
+      }
+    }
   });
 }
 
