@@ -1,10 +1,10 @@
 ---
 id: AH-E-13
 title: GANTT · Modelo temporal de tareas y precedencia
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 18:30'
 labels:
   - gantt
   - fase-1
@@ -29,7 +29,7 @@ Incorporar campos temporales (planned/actual/target/deadline/not_before/fixed/pr
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Precedencia y migración documentadas
-- [ ] #2 Compatibilidad con estimate_days, due_date, started_date
-- [ ] #3 Pronóstico calculado, no persistido como verdad manual
+- [x] #1 Precedencia y migración documentadas
+- [x] #2 Compatibilidad con estimate_days, due_date, started_date
+- [x] #3 Pronóstico calculado, no persistido como verdad manual
 <!-- AC:END -->

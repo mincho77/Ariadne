@@ -1,10 +1,10 @@
 ---
 id: AH-E-14
 title: GANTT · API PATCH segura de actualización parcial
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 18:30'
 labels:
   - gantt
   - fase-1
@@ -28,7 +28,7 @@ Implementar PATCH /api/projects/{slug}/tasks/{id} con validación, escritura at�
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Actualizaciones parciales funcionan
-- [ ] #2 Markdown y campos desconocidos preservados
-- [ ] #3 Pruebas HTTP de conflicto y validación
+- [x] #1 Actualizaciones parciales funcionan
+- [x] #2 Markdown y campos desconocidos preservados
+- [x] #3 Pruebas HTTP de conflicto y validación
 <!-- AC:END -->

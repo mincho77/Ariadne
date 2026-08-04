@@ -47,9 +47,9 @@
 | AH-E-10 | 0 Auditoría | Contrato y escenarios de prueba del planificador | hecho | AH-E-9 | Fixtures FS/SS/FF/SF, lags, ciclos, capacidad, CO festivos | tests/fixtures/gantt (8 escenarios); docs/gantt-planner-contract.md; npm test 80/80 | Habilitar AH-E-13 |
 | AH-E-11 | 1 Fundamentos | Parser YAML confiable ida y vuelta | hecho | AH-E-9 | Round-trip sin pérdida de Markdown | lib/task-markdown.js; tests/task-markdown.test.js | Habilitar AH-E-13 |
 | AH-E-12 | 1 Fundamentos | Modularizar motor de programación | hecho | AH-E-9, AH-E-10 | Extracción progresiva con regresión verde | lib/gantt/*; server.js delega; npm test 80/80 | Habilitar AH-E-13 |
-| AH-E-13 | 1 Fundamentos | Modelo temporal y precedencia | pendiente | AH-E-11, AH-E-12 | Campos planned/actual/deadline documentados | - | Iniciar modelo temporal |
-| AH-E-14 | 1 Fundamentos | API PATCH actualización parcial | pendiente | AH-E-11 | PATCH atómico con validación | - | Tras parser |
-| AH-E-15 | 2 Kanban | Fechas reales automáticas desde Kanban | pendiente | AH-E-13, AH-E-14 | actual_start/finish en transiciones | - | Tras modelo y PATCH |
+| AH-E-13 | 1 Fundamentos | Modelo temporal y precedencia | hecho | AH-E-11, AH-E-12 | Campos planned/actual/deadline documentados | docs/gantt-temporal-model.md; lib/task-temporal.js; planning-task.js | Habilitar AH-E-16 |
+| AH-E-14 | 1 Fundamentos | API PATCH actualización parcial | hecho | AH-E-11 | PATCH atómico con validación | PATCH /api/projects/:slug/tasks/:id; npm test 94/94 | Habilitar AH-E-18 |
+| AH-E-15 | 2 Kanban | Fechas reales automáticas desde Kanban | hecho | AH-E-13, AH-E-14 | actual_start/finish en transiciones | updateTaskStatus + applyKanbanTemporalSync; tests | Habilitar AH-E-16 |
 | AH-E-16 | 2 Kanban | Restricciones, deadlines y diagnósticos | pendiente | AH-E-12, AH-E-13 | Explicabilidad por causa | Parcial en buildProjectGantt | Extender motor |
 | AH-E-17 | 2 Kanban | Unificar Queue, prioridad y capacidad | pendiente | AH-E-12, AH-E-13 | Política Doing→Queue→To Do | ai-capacity.config.json existe | Implementar reglas |
 | AH-E-18 | 2 Kanban | Dependencias aplicables en Kanban | pendiente | AH-E-14, AH-E-16 | Bloqueo FS visible en tablero | POST /tasks/dependencies existe | UI Kanban |
@@ -97,6 +97,8 @@
 - 2026-08-04: Creado ledger, importadas 21 tareas (AH-E-9 … AH-E-29), dependencias en frontmatter, enriquecidas descripciones y AC.
 - 2026-08-04: AH-E-10 … AH-E-12 cerradas — fixtures Gantt, parser YAML, motor modular en lib/gantt/.
 - 2026-08-04: Añadidos `docs/ARQUITECTURA.md` y `docs/GANTT.md` al repo.
+
+- 2026-08-04: AH-E-13 … AH-E-15 cerradas — modelo temporal, PATCH parcial, sync Kanban→actual_start/finish.
 
 ## Evidencias
 

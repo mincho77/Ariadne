@@ -59,6 +59,12 @@ const {
 } = require('./lib/task-markdown');
 const { priorityLabel, priorityRank } = require('./lib/task-priority');
 const {
+  normalizeTaskPatch,
+  applyTaskPatchToSource,
+  buildKanbanTemporalPatch,
+  computeSourceHash,
+} = require('./lib/task-temporal');
+const {
   buildProjectGantt: buildGanttPlan,
   parseDependencySpec,
   toPlanningTask,
@@ -94,8 +100,8 @@ function uniqueSlug(name, projects) {
   return slug;
 }
 
-function parseTask(file) {
-  const source = fs.readFileSync(file, 'utf8');
+function parseTask(file, sourceOverride) {
+  const source = sourceOverride ?? fs.readFileSync(file, 'utf8');
   const { frontmatter } = splitTaskDocument(source);
   const fm = frontmatter && typeof frontmatter === 'object' ? frontmatter : {};
   let title = typeof fm.title === 'string' ? fm.title.trim() : '';
@@ -383,66 +389,81 @@ function enrichTaskSource(source, row) {
 }
 
 function normalizeBulkTaskUpdates(input) {
-  const updates = input && typeof input === 'object' ? input : {};
-  const patch = {};
-
-  const estimateIaRaw = updates.estimateIaHours ?? updates.estimate_ia_hours ?? updates.estimate_hours;
-  if (estimateIaRaw !== undefined && estimateIaRaw !== null && String(estimateIaRaw).trim() !== '') {
-    const estimateIaHours = Number(estimateIaRaw);
-    if (!Number.isFinite(estimateIaHours) || estimateIaHours <= 0) {
-      throw new Error('estimateIaHours debe ser un número mayor que cero');
-    }
-    patch.estimateIaHours = Math.max(1, Math.round(estimateIaHours));
-  }
-
-  const estimateDaysRaw = updates.estimateDays ?? updates.estimate_days;
-  if (estimateDaysRaw !== undefined && estimateDaysRaw !== null && String(estimateDaysRaw).trim() !== '') {
-    const estimateDays = Number(estimateDaysRaw);
-    if (!Number.isFinite(estimateDays) || estimateDays <= 0) {
-      throw new Error('estimateDays debe ser un número mayor que cero');
-    }
-    patch.estimateDays = Math.max(1, Math.round(estimateDays));
-  }
-
-  const startedDateRaw = updates.startedDate ?? updates.started_date;
-  if (startedDateRaw !== undefined && startedDateRaw !== null && String(startedDateRaw).trim() !== '') {
-    const startedDate = String(startedDateRaw).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startedDate)) {
-      throw new Error('startedDate debe tener formato YYYY-MM-DD');
-    }
-    patch.startedDate = startedDate;
-  }
-
-  const dueDateRaw = updates.dueDate ?? updates.due_date;
-  if (dueDateRaw !== undefined && dueDateRaw !== null && String(dueDateRaw).trim() !== '') {
-    const dueDate = String(dueDateRaw).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
-      throw new Error('dueDate debe tener formato YYYY-MM-DD');
-    }
-    patch.dueDate = dueDate;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(updates, 'assignees') || Object.prototype.hasOwnProperty.call(updates, 'assignee')) {
-    patch.assignees = parseListValue(updates.assignees ?? updates.assignee);
-  }
-
-  return patch;
+  return normalizeTaskPatch(input);
 }
 
 function applyBulkTaskUpdatesToSource(source, updates) {
-  let next = String(source || '');
-  if (Number.isFinite(updates.estimateIaHours) && updates.estimateIaHours > 0) {
-    next = upsertFrontmatterScalar(next, 'estimate_ia_hours', updates.estimateIaHours);
+  return applyTaskPatchToSource(source, updates);
+}
+
+function writeTaskFileAtomic(filePath, content) {
+  const normalized = content.endsWith('\n') ? content : `${content}\n`;
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmpPath, normalized, 'utf8');
+  fs.renameSync(tmpPath, filePath);
+}
+
+function assertTaskPatchPreconditions(original, { expectedUpdatedDate, expectedHash, ifMatch } = {}) {
+  const hashCandidate = String(ifMatch || expectedHash || '').trim();
+  if (hashCandidate) {
+    const currentHash = computeSourceHash(original);
+    if (hashCandidate !== currentHash) {
+      throw new Error(`conflicto de edición: el hash actual (${currentHash}) no coincide con el esperado (${hashCandidate})`);
+    }
+    return;
   }
-  if (Number.isFinite(updates.estimateDays) && updates.estimateDays > 0) {
-    next = upsertFrontmatterScalar(next, 'estimate_days', updates.estimateDays);
+  const expected = String(expectedUpdatedDate || '').trim();
+  if (!expected) return;
+  const current = getFrontmatterField(original, 'updated_date');
+  if (current && current !== expected) {
+    throw new Error(`conflicto de edición: updated_date actual (${current || 'vacío'}) difiere del esperado (${expected})`);
   }
-  if (updates.startedDate) next = upsertFrontmatterScalar(next, 'started_date', updates.startedDate);
-  if (updates.dueDate) next = upsertFrontmatterScalar(next, 'due_date', updates.dueDate);
-  if (Object.prototype.hasOwnProperty.call(updates, 'assignees')) {
-    next = upsertFrontmatterList(next, 'assignee', updates.assignees);
+}
+
+function patchProjectTask(project, taskId, payload = {}) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+
+  const patch = normalizeTaskPatch(payload.patch || payload.updates || payload);
+  const patchKeys = Object.keys(patch);
+  if (!patchKeys.length) throw new Error('patch no contiene campos válidos para editar');
+
+  const filePath = resolveTaskFilePath(project, task);
+  const original = fs.readFileSync(filePath, 'utf8');
+  assertTaskPatchPreconditions(original, payload);
+
+  let next = applyTaskPatchToSource(original, patch);
+  if (next === original) throw new Error('no hubo cambios en la tarea');
+
+  next = touchUpdatedDate(validateTaskSource(task.id, next));
+  if (!payload.dryRun) writeTaskFileAtomic(filePath, next);
+
+  const finalSource = payload.dryRun ? next : fs.readFileSync(filePath, 'utf8');
+  return {
+    ...parseTask(filePath, finalSource),
+    file: task.file,
+    source: finalSource,
+    sourceHash: computeSourceHash(finalSource),
+    changes: patchKeys,
+    dryRun: Boolean(payload.dryRun),
+  };
+}
+
+function applyKanbanTemporalSync(project, taskId, fromStatus, toStatus) {
+  const task = findTask(project, taskId);
+  if (!task) return null;
+  const patch = buildKanbanTemporalPatch(task.source, { fromStatus, toStatus });
+  if (!Object.keys(patch).length) {
+    const filePath = resolveTaskFilePath(project, task);
+    return parseTask(filePath);
   }
-  return next;
+
+  const filePath = resolveTaskFilePath(project, task);
+  const original = fs.readFileSync(filePath, 'utf8');
+  let next = applyTaskPatchToSource(original, patch);
+  next = touchUpdatedDate(validateTaskSource(task.id, next));
+  writeTaskFileAtomic(filePath, next);
+  return parseTask(filePath);
 }
 
 function bulkEditProjectTasks(project, payload = {}) {
@@ -686,6 +707,7 @@ function applyTaskStateFallback(project, taskId, status, queuedLabel) {
   next = setQueuedLabel(next, queuedLabel);
   next = touchUpdatedDate(next);
   fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+  applyKanbanTemporalSync(project, taskId, task.status, status);
   return parseTask(filePath);
 }
 
@@ -759,6 +781,7 @@ async function updateTaskStatus(project, taskId, status) {
     const queued = sortQueuedTasks(projectTasks(project).filter((item) => item.status.toLowerCase() === 'queued'));
     await applyQueueOrdinals(project, [...queued.map((item) => item.id).filter((id) => id.toLowerCase() !== task.id.toLowerCase()), task.id]);
   }
+  applyKanbanTemporalSync(project, task.id, task.status, status);
   return parseTask(path.join(project.path, 'backlog', task.file));
 }
 
@@ -1196,8 +1219,8 @@ document.querySelector('.close').onclick=()=>modal.classList.remove('open');moda
 
 async function handle(req, res) {
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
-  res.setHeader('access-control-allow-headers', 'content-type');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PATCH,OPTIONS');
+  res.setHeader('access-control-allow-headers', 'content-type, if-match');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     return res.end();
@@ -1324,6 +1347,23 @@ async function handle(req, res) {
       return json(res, 200, report);
     } catch (error) {
       return json(res, 400, { error: error.message });
+    }
+  }
+  const patchTask = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/([^/]+)$/);
+  if (req.method === 'PATCH' && patchTask) {
+    const project = readCatalog().find((item) => item.slug === patchTask[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const ifMatch = String(req.headers['if-match'] || '').trim();
+      const updated = patchProjectTask(project, decodeURIComponent(patchTask[2]), {
+        ...(data || {}),
+        ifMatch: ifMatch || data?.ifMatch || data?.expectedHash,
+      });
+      return json(res, 200, updated);
+    } catch (error) {
+      const statusCode = /conflicto de edición/i.test(error.message) ? 409 : 400;
+      return json(res, statusCode, { error: error.message });
     }
   }
   const taskDependencies = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/dependencies$/);
@@ -1520,4 +1560,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash };
