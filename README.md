@@ -160,6 +160,23 @@ launchctl kickstart -k gui/$(id -u)/com.ariadne.bug-queue.jurismate
 
 Logs: `/tmp/ariadne-hub.log`, `/tmp/ariadne-bug-queue-jurismate.log`
 
+## Gantt integrado
+
+Planificador multiproyecto sobre el mismo backlog Markdown. Programa **AH-E-9 … AH-E-29** cerrado; ledger en `docs/plans/ariadne-gantt.md`.
+
+```bash
+npm test                  # regresión completa (156+ tests)
+npm run gantt:smoke       # contrato Hub ↔ API Gantt
+npm run gantt:audit       # dry-run readiness backlog
+npm run smoke:cloud       # smoke entorno cloud / agente
+```
+
+- **Plan por proyecto:** `GET /api/projects/{slug}/gantt`
+- **Portafolio:** `GET /api/gantt/portfolio` · Hub `/portfolio.html`
+- **Manual:** `docs/gantt-operaciones.md` · **Funcional:** `docs/GANTT.md`
+
+Cloud agents: `AGENTS.md` y `docs/cloud-dev-environment.md`.
+
 Detener el runner viejo de JurisMate si existía:
 
 ```bash

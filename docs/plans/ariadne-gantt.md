@@ -5,7 +5,7 @@
 - Última actualización: 2026-08-04
 - Objetivo: evolucionar el Gantt de Ariadne hacia planificación, ejecución, seguimiento y reprogramación integrados con Kanban, Queue y ledgers, manteniendo Markdown como fuente de verdad.
 - Gate actual: **AH-E-9 … AH-E-29 cerradas** — programa Gantt integrado completo.
-- Próxima acción: mantenimiento / AH-E-28+ evoluciones futuras fuera de alcance MVP.
+- Próxima acción: merge PR #1 a `master`; mantenimiento Hub (AH-E-2 … AH-E-7) según backlog.
 
 ## Alcance
 
@@ -90,7 +90,7 @@
 | ID | Trabajo | Motivo | Condición de reactivación |
 |---|---|---|---|
 | AGANTT-DEF-01 | Edición visual completa en :63447 | Repo frontend no clonado en workspace | Contrato API + smoke en AH-E-23; clonar frontend-angular localmente | mitigado (backend) |
-| AGANTT-DEF-02 | Portafolio multiproyecto | Prioridad Low; no bloquea MVP | MVP cerrado |
+| AGANTT-DEF-02 | Portafolio multiproyecto | Prioridad Low; no bloquea MVP | MVP cerrado | **cerrado** (AH-E-28) |
 
 ## Historial
 
@@ -121,6 +121,8 @@
 - 2026-08-04: AH-E-28 cerrada — portafolio multiproyecto (`/api/gantt/portfolio`, `/portfolio.html`).
 
 - 2026-08-04: AH-E-29 cerrada — manual operativo, audit dry-run, perf 1000 tareas, docs GANTT/ARQUITECTURA actualizados; npm test verde.
+
+- 2026-08-05: Post-release — README Gantt, AH-E-8 smoke cloud (`npm run smoke:cloud`), AGENTS.md, `.cursor/environment.json`.
 
 ## Evidencias
 
