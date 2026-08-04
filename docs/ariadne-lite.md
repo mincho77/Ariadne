@@ -46,10 +46,13 @@ node scripts/ariadne-route-hint.js "audita con Pharos y despliega"
 
 Integrar el hint en tu launcher de Codex/Cursor **fuera** de este repo cuando el cliente permita elegir modelo por invocación.
 
+**In-repo:** `npm run ariadne:launcher -- "<mensaje>"` o `eval "$(./scripts/ariadne-launcher.sh '<mensaje>')"` — ver `docs/ariadne-launcher.md`.
+
 ## Validación
 
 ```bash
 python3 skills/ariadne/scripts/check_plan.py docs/plans/ariadne-mejoras.md
+npm run ariadne:sync -- --fix
 npm run ariadne:audit
 ```
 

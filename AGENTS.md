@@ -15,18 +15,19 @@ npm install
 npm run smoke:cloud
 npm run smoke:lifecycle   # ARLOCAL-010 two-project Kanban lifecycle
 npm test
-npm run ariadne:audit   # all docs/plans ledgers + optional gantt backlog
-npm run ariadne:audit:fix   # same + rewrite stale Próxima acción → —
+npm run ariadne:sync -- --fix   # post-edit: audit + ledger hygiene + check_plan
+npm run ariadne:audit   # audit only (same as sync step 1)
 ```
 
 Kanban task APIs (`/api/tasks/*`) listen on **`ARIADNE_BOARD_PORT`** (default `6421`); hub/Gantt on **`ARIADNE_HUB_PORT`** (default `4177`). Integration tests that exercise create/status/content must start both ports (see `tests/two-project-lifecycle.test.js`).
 
 ### Lite vs full skill
 
-Simple backlog/ledger updates: **`skills/ariadne-lite/`** (`docs/ariadne-lite.md`).
+Simple backlog/ledger updates: **`skills/ariadne-lite/`** (`docs/ariadne-lite.md`). After edits: **`npm run ariadne:sync -- --fix`** (`docs/ariadne-automation.md`).
 
 ```bash
 npm run ariadne:route-hint -- "mueve tarea a cola"   # JSON hint for wrappers
+npm run ariadne:launcher -- "actualiza el ledger"   # skill path + env exports
 ```
 
 ### Run Hub locally (manual)

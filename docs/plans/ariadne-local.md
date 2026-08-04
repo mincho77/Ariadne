@@ -5,7 +5,7 @@
 - Última actualización: 2026-08-04
 - Objetivo: administrar varios proyectos locales con tableros Markdown, reglas Ariadne y recuperación clara de trabajo.
 - Gate actual: repo standalone operativo; Kanban con edición, cola manual y módulo de bugs con analytics por tema.
-- Próxima acción: integrar route-hint en launcher externo o retomar ARLOCAL-025+ (JurisMate producción).
+- Próxima acción: retomar ARLOCAL-025+ (JurisMate producción) o cerrar ledger local si el Hub queda en mantenimiento.
 
 ## Alcance
 
@@ -52,7 +52,7 @@
 | ARLOCAL-007 | 4 Ariadne | Adaptar skill a Backlog MCP y CLI | hecho | ARLOCAL-003 | Ariadne usa operaciones Backlog cuando existen y cae a Markdown solo cuando corresponde | `~/.codex/skills/ariadne/SKILL.md` actualizado | Usar contrato en próximos planes |
 | ARLOCAL-008 | 4 Ariadne | Añadir checkpoints, hallazgos, errores y recuperación | hecho | ARLOCAL-007 | Cada fase guarda estado, siguiente acción, evidencia y errores relevantes | Skill actualizado con checkpoint/recover y reglas de evidencia | Implementar comandos dedicados si hacen falta |
 | ARLOCAL-009 | 4 Ariadne | Añadir auditoría multiproyecto | hecho | ARLOCAL-005, ARLOCAL-007 | `npm run ariadne:audit` revisa ledgers y backlog Gantt | scripts/ariadne-audit-all.js | — |
-| ARLOCAL-010 | 5 Validación | Probar ciclo completo con dos proyectos | hecho | ARLOCAL-006, ARLOCAL-009 | Crear, avanzar, bloquear, reanudar y cerrar tareas sin perder datos | tests/two-project-lifecycle.test.js; npm test 166/166 | Integrar route-hint |
+| ARLOCAL-010 | 5 Validación | Probar ciclo completo con dos proyectos | hecho | ARLOCAL-006, ARLOCAL-009 | Crear, avanzar, bloquear, reanudar y cerrar tareas sin perder datos | tests/two-project-lifecycle.test.js; npm test 169/169 | — |
 | ARLOCAL-011 | 5 Entrega | Documentar comando de inicio y backup | hecho | ARLOCAL-003 | Usuario puede iniciar Hub y entender ubicación de datos | `tools/ariadne-hub/README.md`; bind local documentado | Añadir backup cuando exista catálogo real |
 | ARLOCAL-012 | 5 Operación | Priorizar tareas y distinguir bugs en el tablero | hecho | ARLOCAL-006 | Las prioridades se configuran como Ultra High → High → Medium → Low; tarjetas ordenadas y tipadas | Backlog `JM-18` (Done); `backlog.config.yml`; `tools/ariadne-hub/server.js`; `npm test` 3/3 | Atender JM-17 |
 | ARLOCAL-013 | 5 Operación | Mantener registro de bugs resueltos | hecho | ARLOCAL-012 | Existe registro con regla de entrada y evidencia obligatoria | `docs/plans/bugs-resueltos.md` | Añadir cada bug únicamente al cerrar su tarea |
@@ -87,7 +87,7 @@
 | ARLOCAL-042 | 12 Hub | Editar Markdown de tareas desde el Kanban | hecho | ARLOCAL-041 | Modal permite editar y guardar Markdown completo con validación de frontmatter e `id` | Backlog `AH-2` Done; commit `657782e`; API `/api/tasks/content`; pruebas 13/13 | Usar para ajustes manuales puntuales |
 | ARLOCAL-043 | 12 Hub | Igualar altura de columnas del tablero | hecho | ARLOCAL-041 | Todas las columnas comparten altura y la zona inferior acepta drop | Backlog `AH-3` Done; commit `657782e`; CSS `align-items:stretch` | Mantener al cambiar layout |
 | ARLOCAL-044 | 12 Hub | Repriorizar cola manualmente | hecho | ARLOCAL-016, ARLOCAL-041 | Queue ordena por `ordinal`; arrastre actualiza turnos y persiste en Backlog | Backlog `AH-4` Done; commit `71f19d1`; API `/api/tasks/queue-order`; pruebas 14/14 | Usar turno 1 como siguiente a ejecutar |
-| ARLOCAL-045 | 12 Hub | Evaluar modo liviano de Ariadne | hecho | ARLOCAL-007 | Decisión `ariadne-lite` documentada | docs/ariadne-lite.md; AH-E-5 Done | Integrar route-hint |
+| ARLOCAL-045 | 12 Hub | Evaluar modo liviano de Ariadne | hecho | ARLOCAL-007 | Decisión `ariadne-lite` documentada | docs/ariadne-lite.md; AH-E-5 Done; docs/ariadne-launcher.md | — |
 | ARLOCAL-046 | 12 Hub | Módulo de bugs con analytics por tema | hecho | ARLOCAL-041 | Vista bugs filtra incidencias, muestra KPIs, barras y tabla comparativa por tema | Backlog `AH-6` Done; `bugs-board.js`; `view=bugs`; API `/api/bugs/stats` | Refinar reglas de tema según uso real |
 
 ## Riesgos
@@ -128,7 +128,8 @@
 
 ## Historial
 
-- 2026-08-04: `npm run ariadne:audit:fix` corrige referencias obsoletas en columna Próxima acción (p. ej. ARLOCAL-009 → ARLOCAL-010 ya hecho); lib/ledger-hygiene.js integrado en audit-all.
+- 2026-08-04: Route-hint launcher (`scripts/ariadne-launcher.js`, `docs/ariadne-launcher.md`); ARIM-003/004 hecho en ariadne-mejoras.
+- 2026-08-04: `npm run ariadne:audit:fix` corrige referencias obsoletas en columna Próxima acción; lib/ledger-hygiene.js integrado en audit-all.
 - 2026-08-04: ARLOCAL-010 cerrado con prueba HTTP multiproyecto (`tests/two-project-lifecycle.test.js`): crear, cola, In Progress, edición Markdown, bloqueo por subestado, reanudación y cierre en `proj-alpha` y `proj-beta` sin pérdida en disco; portafolio Gantt con dos proyectos; `npm test` 166/166.
 
 - 2026-07-26: Se revisaron skills/repositorios de GitHub y herramientas locales.
