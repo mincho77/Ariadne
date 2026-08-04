@@ -27,6 +27,7 @@ Simple backlog/ledger updates: **`skills/ariadne-lite/`** (`docs/ariadne-lite.md
 
 ```bash
 npm run ariadne:route-hint -- "mueve tarea a cola"   # JSON hint for wrappers
+npm run ariadne:launcher -- "actualiza el ledger"   # skill path + env exports
 ```
 
 ### Run Hub locally (manual)

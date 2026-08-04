@@ -5,7 +5,7 @@
 - Última actualización: 2026-08-05
 - Objetivo: mantener una cola separada de mejoras para Ariadne, incluyendo ahorro de tokens, variantes livianas y automatizacion operativa sin mezclarlo con bugs productivos de JurisMate.
 - Gate actual: AH-E-5 cerrada; skill `ariadne-lite` disponible.
-- Próxima acción: integrar `ariadne-route-hint` en launcher externo si el cliente permite elegir modelo.
+- Próxima acción: mantener launcher documentado; retomar wrapper de modelo real solo si el cliente lo expone.
 
 ## Alcance
 
@@ -42,8 +42,8 @@
 |---|---|---|---|---|---|---|---|
 | ARIM-001 | Producto | Definir modo barato para tareas simples de Ariadne | hecho | - | Reglas en docs/ariadne-lite.md | AH-E-5; tabla lite vs full | Mantener |
 | ARIM-002 | Implementacion | Crear variante `ariadne-lite` o ajuste equivalente | hecho | ARIM-001 | skills/ariadne-lite/SKILL.md | npm test ariadne-lite | — |
-| ARIM-003 | Automatizacion | Evaluar wrapper de seleccion de modelo | diferido | ARIM-001 | Hint CLI listo; modelo lo elige Cursor/Codex | scripts/ariadne-route-hint.js | Integrar en launcher |
-| ARIM-004 | Validacion | Medir ahorro y seguridad del flujo | pendiente | ARIM-002, ARIM-003 | Una prueba real actualiza una tarea Ariadne con menos contexto y `check_plan.py` pasa | - | Ejecutar una actualizacion no critica |
+| ARIM-003 | Automatizacion | Evaluar wrapper de seleccion de modelo | hecho | ARIM-001 | Launcher in-repo exporta skill y env para wrappers externos | scripts/ariadne-launcher.js; docs/ariadne-launcher.md | Mantener |
+| ARIM-004 | Validacion | Medir ahorro y seguridad del flujo | hecho | ARIM-002, ARIM-003 | Una prueba real actualiza una tarea Ariadne con menos contexto y `check_plan.py` pasa | tests/ariadne-launcher.test.js; lite path audit+fix; npm test | Vigilar regresiones lite |
 
 ## Riesgos
 
@@ -63,8 +63,9 @@
 
 | ID | Trabajo | Motivo | Condicion de reactivacion |
 |---|---|---|---|
-| ARIM-DEF-001 | Implementar wrapper real de modelo | Requiere confirmar desde donde se invoca Codex y que modelos estan disponibles | Hint `npm run ariadne:route-hint` entregado; falta cableado en cliente |
+| ARIM-DEF-001 | Implementar wrapper real de modelo | Requiere confirmar desde donde se invoca Codex y que modelos estan disponibles | Launcher `ariadne-launcher.js` entregado; modelo sigue en cliente |
 
 ## Historial
 
+- 2026-08-04: ARIM-003/004 — `scripts/ariadne-launcher.js`, `docs/ariadne-launcher.md`, test ARIM-004 lite path; npm test verde.
 - 2026-08-05: AH-E-5 — skill `ariadne-lite`, docs/ariadne-lite.md, route-hint CLI; ARIM-001/002 hecho.

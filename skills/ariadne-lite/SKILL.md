@@ -64,4 +64,4 @@ Done still requires tests, diff, log, or explicit acceptance — lite does not r
 node scripts/ariadne-route-hint.js "<user message>"
 ```
 
-Returns JSON suggesting `ariadne-lite` vs `ariadne` for external wrappers.
+Returns JSON suggesting `ariadne-lite` vs `ariadne` for external wrappers. Full launcher: `npm run ariadne:launcher` · `docs/ariadne-launcher.md`.

@@ -184,7 +184,7 @@ npm run ariadne:audit
 npm run ariadne:route-hint -- "mueve tarea a cola"
 ```
 
-Modo liviano de gobernanza: `docs/ariadne-lite.md` · skill `skills/ariadne-lite/`.
+Modo liviano de gobernanza: `docs/ariadne-lite.md` · launcher `docs/ariadne-launcher.md` · skill `skills/ariadne-lite/`.
 
 Detener el runner viejo de JurisMate si existía:
 
