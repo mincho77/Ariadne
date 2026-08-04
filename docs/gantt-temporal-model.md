@@ -22,7 +22,7 @@ Campos YAML opcionales en `backlog/tasks/*.md`. El **pronóstico** (`startDate`/
 | `fixed` | boolean | Fechas fijas (futuro) |
 | `progress` | 0–100 | Avance declarado |
 | `remaining_ia_hours` | entero ≥ 0 | Trabajo restante; prioridad sobre `progress` en el pronóstico |
-| `blocked`, `blocked_reason`, `blocked_until` | bool/text/date | Bloqueo temporal (futuro AH-E-21) |
+| `blocked`, `blocked_reason`, `blocked_by`, `blocked_since`, `expected_unblock_date`, `blocked_until` | bool/text/date | Bloqueo temporal; ver `docs/gantt-blocks.md` |
 
 Legacy: `started_date`, `due_date`, `estimate_days`, `estimate_ia_hours` siguen válidos.
 

@@ -23,6 +23,7 @@ Stable JSON shape returned by `GET /api/projects/{slug}/gantt`.
 - `estimatedPendingIaHours`, `estimatedPendingDays`
 - `blockedByDependencies`, `unresolvedDependencies`, `cycleDetected`
 - `deadlineViolations`, `restrictionViolations`
+- `blockedTasks`, `lowConfidenceForecasts`
 
 ## `tasks[]` item (scheduled)
 
@@ -79,3 +80,7 @@ Immutable schedule snapshots live under `backlog/docs/gantt/baselines/`. See `do
 | GET | `/api/projects/{slug}/gantt/baselines/{id}/compare` | Delta vs current `GET …/gantt` forecast |
 
 Compare accepts the same query parameters as the Gantt endpoint (`capacity`, `startDate`, `includeDone`, …).
+
+## Temporal blocks (AH-E-21)
+
+Blocked tasks expose `forecastConfidence` and block metadata on `tasks[]`. See `docs/gantt-blocks.md`.

@@ -1,10 +1,10 @@
 ---
 id: AH-E-21
 title: GANTT · Bloqueos temporales modelados
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 21:00'
 labels:
   - gantt
   - fase-3
@@ -29,7 +29,7 @@ Modelar blocked_since, blocked_reason, blocked_by, expected_unblock_date; pronó
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Campos en frontmatter
-- [ ] #2 Motor marca confianza baja
-- [ ] #3 Pruebas de bloqueo temporal
+- [x] #1 Campos en frontmatter
+- [x] #2 Motor marca confianza baja
+- [x] #3 Pruebas de bloqueo temporal
 <!-- AC:END -->

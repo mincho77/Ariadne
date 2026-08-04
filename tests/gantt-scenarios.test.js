@@ -122,6 +122,19 @@ for (const entry of manifest.scenarios) {
     if (expect.capacityPolicy) {
       assert.deepEqual(plan.parameters.capacityPolicy, expect.capacityPolicy);
     }
+    if (expect.forecastConfidence) {
+      for (const [id, level] of Object.entries(expect.forecastConfidence)) {
+        const task = plan.tasks.find((item) => item.id === id);
+        assert.ok(task, `missing task ${id}`);
+        assert.equal(task.forecastConfidence, level, `${id} confidence`);
+      }
+    }
+    if (expect.summaryBlockedTasks != null) {
+      assert.equal(plan.summary.blockedTasks, expect.summaryBlockedTasks);
+    }
+    if (expect.lowConfidenceForecasts != null) {
+      assert.equal(plan.summary.lowConfidenceForecasts, expect.lowConfidenceForecasts);
+    }
   });
 }
 

@@ -59,6 +59,11 @@
       "id": "lane-capacity",
       "dir": "lane-capacity",
       "description": "Split bugs/enhancements lane capacity"
+    },
+    {
+      "id": "temporal-block",
+      "dir": "temporal-block",
+      "description": "Temporal blocks delay start or mark low-confidence forecast"
     }
   ]
 }
