@@ -1,10 +1,10 @@
 ---
 id: AH-E-24
 title: GANTT · Métricas de seguimiento en el Hub
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 22:30'
 labels:
   - gantt
   - fase-4
@@ -32,6 +32,6 @@ Hub muestra fin planeado/pronosticado, variación, % completado, atrasos, deadli
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Métricas por proyecto en tarjeta Hub
-- [ ] #2 Confianza baja con reglas documentadas
+- [x] #1 Métricas por proyecto en tarjeta Hub
+- [x] #2 Confianza baja con reglas documentadas
 <!-- AC:END -->

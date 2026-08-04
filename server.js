@@ -88,6 +88,7 @@ const {
   buildHubGanttUiConfig,
   buildGanttLaunchUrl,
 } = require('./lib/gantt/ui-contract');
+const { buildHubGanttMetrics } = require('./lib/gantt/hub-metrics');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -246,6 +247,27 @@ function compareProjectBaseline(project, baselineId, ganttOptions = {}) {
 }
 
 
+function buildProjectGanttMetrics(project, ganttOptions = {}) {
+  const plan = buildProjectGantt(project, ganttOptions);
+  const baselines = listBaselines(project);
+  const latest = baselines[0] || null;
+  let baselinePayload = null;
+  let baselineCompare = null;
+  if (latest) {
+    try {
+      baselinePayload = readBaselineFile(project, latest.id);
+      baselineCompare = compareProjectBaseline(project, latest.id, ganttOptions);
+    } catch {
+      baselinePayload = null;
+      baselineCompare = null;
+    }
+  }
+  return buildHubGanttMetrics(plan, {
+    baseline: baselinePayload,
+    baselineCompare,
+  });
+}
+
 function summarize(project) {
   const tasks = projectTasks(project);
   const bugs = tasks.filter(isBugTask);
@@ -254,7 +276,7 @@ function summarize(project) {
   const impDone = improvements.filter((task) => /done|complete/i.test(task.status)).length;
   const nextBug = pickNextBug(tasks);
   const nextImprovement = pickNextImprovement(tasks);
-  return {
+  const summary = {
     ...project,
     exists: fs.existsSync(project.path),
     bugs: bugs.length,
@@ -274,6 +296,19 @@ function summarize(project) {
     focus: bugs.length - bugsDone > 0 ? 'bugs' : 'mejoras',
     boardRunning: project.port === BOARD_PORT,
   };
+
+  if (!summary.exists) {
+    summary.ganttMetrics = null;
+    return summary;
+  }
+
+  try {
+    summary.ganttMetrics = buildProjectGanttMetrics(project, { includeDone: false });
+  } catch {
+    summary.ganttMetrics = null;
+  }
+
+  return summary;
 }
 
 function json(res, status, body) {
@@ -1318,6 +1353,21 @@ async function handle(req, res) {
     if (!project) return json(res, 404, { error: 'project not found' });
     return json(res, 200, buildProjectGantt(project, ganttOptionsFromRequest(url, project)));
   }
+  const ganttMetrics = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/metrics$/);
+  if (req.method === 'GET' && ganttMetrics) {
+    const project = readCatalog().find((item) => item.slug === ganttMetrics[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (!fs.existsSync(project.path)) return json(res, 404, { error: 'project path missing' });
+    try {
+      const metrics = buildProjectGanttMetrics(project, {
+        ...ganttOptionsFromRequest(url, project),
+        includeDone: url.searchParams.get('includeDone') !== '0',
+      });
+      return json(res, 200, { project: project.slug, metrics });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   const ganttBaselines = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/baselines$/);
   if (ganttBaselines) {
     const project = readCatalog().find((item) => item.slug === ganttBaselines[1]);
@@ -1673,4 +1723,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask, createProjectBaseline, compareProjectBaseline, listBaselines, readBaselineFile };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, buildProjectGanttMetrics, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask, createProjectBaseline, compareProjectBaseline, listBaselines, readBaselineFile };

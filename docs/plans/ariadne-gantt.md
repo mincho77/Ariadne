@@ -4,8 +4,8 @@
 - Estado: en_progreso
 - Última actualización: 2026-08-04
 - Objetivo: evolucionar el Gantt de Ariadne hacia planificación, ejecución, seguimiento y reprogramación integrados con Kanban, Queue y ledgers, manteniendo Markdown como fuente de verdad.
-- Gate actual: AH-E-10 … AH-E-12 cerradas; siguiente AH-E-13 (modelo temporal).
-- Próxima acción: iniciar AH-E-13 tras revisar dependencias en Kanban/Gantt.
+- Gate actual: AH-E-9 … AH-E-24 cerradas; siguiente AH-E-29 (endurecimiento MVP) o post-MVP AH-E-25+.
+- Próxima acción: cerrar MVP con AH-E-29 o continuar capacidad avanzada (AH-E-25).
 
 ## Alcance
 
@@ -58,7 +58,7 @@
 | AH-E-21 | 3 Seguimiento | Bloqueos temporales modelados | hecho | AH-E-13, AH-E-16 | blocked_* y confianza baja | lib/gantt/blocks.js; docs/gantt-blocks.md; escenario temporal-block | Habilitar AH-E-24 |
 | AH-E-22 | 3 Seguimiento | Fases, entregables e hitos | hecho | AH-E-11, AH-E-13 | parent_id, hitos duración 0 | lib/gantt/hierarchy.js; docs/gantt-hierarchy.md; escenario phases-milestones | Habilitar AH-E-23 |
 | AH-E-23 | 4 Gantt UI | UI editable (coordinación externa) | hecho | AH-E-14, AH-E-16, AH-E-19, AH-E-20, AH-E-22 | Contrato API + smoke Hub→63447 | docs/gantt-ui-integration.md; lib/gantt/ui-contract.js; npm run gantt:smoke | Habilitar AH-E-24 |
-| AH-E-24 | 4 Hub | Métricas de seguimiento en Hub | pendiente | AH-E-15, AH-E-16, AH-E-19, AH-E-20, AH-E-21 | Tarjeta proyecto con fin plan/pronóstico | - | Tras métricas backend |
+| AH-E-24 | 4 Hub | Métricas de seguimiento en Hub | hecho | AH-E-15, AH-E-16, AH-E-19, AH-E-20, AH-E-21 | Tarjeta proyecto con fin plan/pronóstico | lib/gantt/hub-metrics.js; docs/gantt-hub-metrics.md; public/app.js | Habilitar AH-E-29 |
 | AH-E-25 | 5 Avanzado | Recursos y capacidad por habilidad | pendiente | AH-E-11, AH-E-12, AH-E-13 | assignee, skills, resource_type | Diferido post-MVP | Tras MVP |
 | AH-E-26 | 5 Avanzado | Holgura y CP condicionada | pendiente | AH-E-16, AH-E-25 | Slack y CP lógica vs recursos | - | Post-MVP |
 | AH-E-27 | 5 Avanzado | Escenarios qué-pasa-si | pendiente | AH-E-19, AH-E-25, AH-E-26 | Simulación sin persistir | - | Post-MVP |
@@ -113,6 +113,8 @@
 - 2026-08-04: AH-E-22 cerrada — jerarquía parent_id, hitos duración cero en API Gantt.
 
 - 2026-08-04: AH-E-23 cerrada — contrato UI externo, hub-config ampliado, smoke Hub→backend (AGANTT-DEF-01 documentado).
+
+- 2026-08-04: AH-E-24 cerrada — métricas Gantt en tarjetas Hub y GET /gantt/metrics.
 
 ## Evidencias
 

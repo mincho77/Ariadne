@@ -23,7 +23,7 @@ Stable JSON shape returned by `GET /api/projects/{slug}/gantt`.
 - `estimatedPendingIaHours`, `estimatedPendingDays`
 - `blockedByDependencies`, `unresolvedDependencies`, `cycleDetected`
 - `deadlineViolations`, `restrictionViolations`
-- `blockedTasks`, `lowConfidenceForecasts`
+- `blockedTasks`, `lowConfidenceForecasts`, `blockedWithoutUnblockDate`, `milestoneCount`, `hierarchyRoots`
 
 ## `tasks[]` item (scheduled)
 
@@ -92,3 +92,7 @@ Blocked tasks expose `forecastConfidence` and block metadata on `tasks[]`. See `
 ## External UI integration (AH-E-23)
 
 The editable Gantt diagram runs in a separate frontend (`localhost:63447` by default). Hub discovery: `GET /api/hub-config` (`ganttUi`, `ganttLaunchExample`) and `GET /api/gantt-ui-contract`. See `docs/gantt-ui-integration.md`. Smoke: `npm run gantt:smoke`.
+
+## Hub tracking metrics (AH-E-24)
+
+`GET /api/projects` includes `ganttMetrics` per project; dedicated endpoint `GET /api/projects/{slug}/gantt/metrics`. See `docs/gantt-hub-metrics.md`.
