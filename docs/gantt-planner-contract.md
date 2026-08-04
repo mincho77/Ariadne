@@ -39,6 +39,8 @@ Required: `fromId`, `toId`, `relation` (FS|SS|FF|SF), `fromAnchor`, `toAnchor`, 
 | Param | Default | Notes |
 |-------|---------|-------|
 | `capacity` | 2 or ai-config | 1–12 parallel tasks |
+| `capacityBugs` | from config | Max parallel in bugs lane |
+| `capacityEnhancements` | from config | Max parallel in mejoras lane |
 | `includeDone` | 1 | 0 excludes `doneTimeline` |
 | `iaHoursPerDay` | 8 | IA hours per business day |
 | `startDate` | today | YYYY-MM-DD |

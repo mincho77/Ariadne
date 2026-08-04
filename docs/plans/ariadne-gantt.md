@@ -102,6 +102,8 @@
 
 - 2026-08-04: AH-E-16 y AH-E-18 cerradas — restricciones/deadlines con diagnósticos y bloqueo FS en Kanban.
 
+- 2026-08-04: AH-E-17 cerrada — política Doing→Queue→To Do y capacidad por carril.
+
 ## Evidencias
 
 ### AH-E-9 — Auditoría inicial (2026-08-04)
