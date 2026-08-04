@@ -13,9 +13,12 @@ npm install
 
 ```bash
 npm run smoke:cloud
+npm run smoke:lifecycle   # ARLOCAL-010 two-project Kanban lifecycle
 npm test
 npm run ariadne:audit   # all docs/plans ledgers + optional gantt backlog
 ```
+
+Kanban task APIs (`/api/tasks/*`) listen on **`ARIADNE_BOARD_PORT`** (default `6421`); hub/Gantt on **`ARIADNE_HUB_PORT`** (default `4177`). Integration tests that exercise create/status/content must start both ports (see `tests/two-project-lifecycle.test.js`).
 
 ### Lite vs full skill
 
