@@ -118,6 +118,28 @@ Edita `projects.json` o usa **+ Nuevo proyecto** en el Hub. Cada entrada necesit
 python3 skills/ariadne/scripts/check_plan.py docs/plans/ariadne-local.md
 ```
 
+## Publicar standalone en GitHub
+
+Checklist automatizado de preparación:
+
+```bash
+npm run release:check:standalone
+```
+
+Generar bundle reproducible del código fuente (git archive):
+
+```bash
+npm run release:bundle
+```
+
+Se genera un archivo en `dist/` con formato:
+
+- `ariadne-standalone-v{version}-YYYYMMDD.tar.gz`
+
+Runbook completo:
+
+- `docs/plans/standalone-github-publish.md`
+
 ## Arranque automático (macOS)
 
 Hub:

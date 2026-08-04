@@ -53,8 +53,9 @@ const {
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
 const BOARD_PORT = Number(process.env.ARIADNE_BOARD_PORT || 6421);
+const GANTT_BASE_URL = String(process.env.ARIADNE_GANTT_BASE_URL || 'http://localhost:63447/');
 const HOST = '127.0.0.1';
-const CATALOG = path.join(ROOT, 'projects.json');
+const CATALOG = path.resolve(process.env.ARIADNE_CATALOG_PATH || path.join(ROOT, 'projects.json'));
 const BACKLOG = path.join(ROOT, 'node_modules', '.bin', 'backlog');
 const WEB = path.join(ROOT, 'public');
 const browserProcesses = new Map();
@@ -181,6 +182,671 @@ function projectTasks(project) {
   return tasks;
 }
 
+function parseDateStamp(value) {
+  const input = String(value || '').trim();
+  if (!input) return null;
+  const normalized = input.includes('T') ? input : input.replace(' ', 'T');
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function parseFrontmatterList(source, field) {
+  const input = String(source || '');
+  const block = input.match(new RegExp(`^${field}:\\s*\\n((?:\\s+-\\s+.+\\n?)*)`, 'mi'));
+  if (block) {
+    return [...block[1].matchAll(/^\s+-\s+(.+)$/gm)]
+      .map((item) => item[1].trim())
+      .filter(Boolean);
+  }
+  const inline = input.match(new RegExp(`^${field}:\\s*\\[(.*?)\\]\\s*$`, 'mi'));
+  if (inline) {
+    return inline[1].split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function parseFrontmatterNumber(source, field) {
+  const input = String(source || '');
+  const match = input.match(new RegExp(`^${field}:\\s*([0-9]+(?:\\.[0-9]+)?)\\s*$`, 'mi'));
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function dependencyAnchors(relation) {
+  const normalized = String(relation || 'FS').toUpperCase();
+  if (normalized === 'SS') return { relation: 'SS', fromAnchor: 'start', toAnchor: 'start', sequential: false };
+  if (normalized === 'FF') return { relation: 'FF', fromAnchor: 'end', toAnchor: 'end', sequential: false };
+  if (normalized === 'SF') return { relation: 'SF', fromAnchor: 'start', toAnchor: 'end', sequential: true };
+  return { relation: 'FS', fromAnchor: 'end', toAnchor: 'start', sequential: true };
+}
+
+function parseDependencySpec(raw, iaHoursPerDay) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+
+  const compact = value.replace(/\s+/g, '');
+  const match = compact.match(/^([A-Za-z0-9][A-Za-z0-9-]*)(?:[:|@](FS|SS|FF|SF)([+-]\d+(?:[dh])?)?)?$/i)
+    || compact.match(/^([A-Za-z0-9][A-Za-z0-9-]*)$/);
+  if (!match) return null;
+
+  const id = String(match[1] || '').trim();
+  if (!id) return null;
+
+  const anchors = dependencyAnchors(match[2] || 'FS');
+  const lagToken = String(match[3] || '').trim();
+  let lagBusinessDays = 0;
+  let lagIaHours = 0;
+
+  if (lagToken) {
+    const lagMatch = lagToken.match(/^([+-]\d+)([dh])?$/i);
+    if (lagMatch) {
+      const amount = Number(lagMatch[1]);
+      const unit = String(lagMatch[2] || 'd').toLowerCase();
+      if (Number.isFinite(amount)) {
+        if (unit === 'h') {
+          lagIaHours = amount;
+          lagBusinessDays = iaHoursPerDay > 0 ? Math.trunc(amount / iaHoursPerDay) : 0;
+        } else {
+          lagBusinessDays = amount;
+          lagIaHours = amount * iaHoursPerDay;
+        }
+      }
+    }
+  }
+
+  return {
+    raw: value,
+    id,
+    relation: anchors.relation,
+    fromAnchor: anchors.fromAnchor,
+    toAnchor: anchors.toAnchor,
+    lagBusinessDays,
+    lagIaHours,
+    sequential: anchors.sequential,
+  };
+}
+
+function parseHolidayList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  return String(value)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function shiftDate(date, deltaDays) {
+  const shifted = new Date(date);
+  shifted.setDate(shifted.getDate() + deltaDays);
+  return shifted;
+}
+
+function moveToMondayDate(date) {
+  const moved = new Date(date);
+  while (moved.getDay() !== 1) moved.setDate(moved.getDate() + 1);
+  return moved;
+}
+
+function easterDate(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function colombiaHolidaysByYear(year) {
+  const fixed = [
+    new Date(year, 0, 1),
+    new Date(year, 4, 1),
+    new Date(year, 6, 20),
+    new Date(year, 7, 7),
+    new Date(year, 11, 8),
+    new Date(year, 11, 25),
+  ];
+
+  const emiliani = [
+    moveToMondayDate(new Date(year, 0, 6)),
+    moveToMondayDate(new Date(year, 2, 19)),
+    moveToMondayDate(new Date(year, 5, 29)),
+    moveToMondayDate(new Date(year, 7, 15)),
+    moveToMondayDate(new Date(year, 9, 12)),
+    moveToMondayDate(new Date(year, 10, 1)),
+    moveToMondayDate(new Date(year, 10, 11)),
+  ];
+
+  const easter = easterDate(year);
+  const easterBased = [
+    shiftDate(easter, -3),
+    shiftDate(easter, -2),
+    moveToMondayDate(shiftDate(easter, 43)),
+    moveToMondayDate(shiftDate(easter, 64)),
+    moveToMondayDate(shiftDate(easter, 71)),
+  ];
+
+  return [...fixed, ...emiliani, ...easterBased].map((date) => formatIsoDate(date));
+}
+
+function colombiaHolidaysAround(startDate) {
+  const year = startDate.getFullYear();
+  return [...new Set([...colombiaHolidaysByYear(year), ...colombiaHolidaysByYear(year + 1)])];
+}
+
+function toDateOnlyIso(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseStartDate(value) {
+  const input = String(value || '').trim();
+  if (!input) return new Date();
+  const date = new Date(`${input}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function buildWorkingCalendar(options = {}) {
+  const today = parseStartDate(options.startDate);
+  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const iaHoursPerDay = Math.max(1, Math.min(24, Number(options.iaHoursPerDay) || 8));
+  const workOnSaturday = options.workOnSaturday === true;
+  const holidaySet = new Set([
+    ...colombiaHolidaysAround(startDate),
+    ...parseHolidayList(options.holidays),
+  ]);
+
+  const dayDiff = (from, to) => {
+    const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+    return Math.round((end.getTime() - start.getTime()) / 86400000);
+  };
+
+  const isWorkingDay = (date) => {
+    const day = date.getDay();
+    const sunday = day === 0;
+    const saturday = day === 6;
+    if (sunday) return false;
+    if (!workOnSaturday && saturday) return false;
+    return !holidaySet.has(toDateOnlyIso(date));
+  };
+
+  const toCalendarMarker = (hourOffset) => {
+    const safeOffset = Math.max(0, Number(hourOffset) || 0);
+    let remaining = safeOffset;
+    let businessDayIndex = 0;
+    const cursor = new Date(startDate);
+
+    while (!isWorkingDay(cursor)) cursor.setDate(cursor.getDate() + 1);
+
+    while (remaining >= iaHoursPerDay) {
+      remaining -= iaHoursPerDay;
+      do {
+        cursor.setDate(cursor.getDate() + 1);
+      } while (!isWorkingDay(cursor));
+      businessDayIndex += 1;
+    }
+
+    return {
+      date: new Date(cursor),
+      dateIso: toDateOnlyIso(cursor),
+      monthKey: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+      monthLabel: cursor.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }),
+      businessDayIndex,
+      hourInDay: remaining,
+      calendarDayOfWeek: cursor.getDay(),
+    };
+  };
+
+  return {
+    startDateIso: toDateOnlyIso(startDate),
+    startDate,
+    iaHoursPerDay,
+    workOnSaturday,
+    holidays: [...holidaySet],
+    isWorkingDay,
+    dayDiff,
+    toCalendarMarker,
+  };
+}
+
+function isDoneStatus(status) {
+  return /done|complete/i.test(String(status || ''));
+}
+
+function defaultDurationByPriority(priority) {
+  const key = String(priority || '').toLowerCase();
+  if (key === 'ultra high') return 4;
+  if (key === 'high') return 3;
+  if (key === 'low') return 1;
+  return 2;
+}
+
+function estimateTaskDurationDays(task) {
+  const fromEstimate = parseFrontmatterNumber(task.source, 'estimate_days')
+    ?? parseFrontmatterNumber(task.source, 'effort_days')
+    ?? parseFrontmatterNumber(task.source, 'duration_days');
+  if (fromEstimate && fromEstimate > 0) return Math.max(1, Math.round(fromEstimate));
+  return defaultDurationByPriority(task.priority);
+}
+
+function estimateTaskIaHours(task, iaHoursPerDay) {
+  const fromHours = parseFrontmatterNumber(task.source, 'estimate_ia_hours')
+    ?? parseFrontmatterNumber(task.source, 'estimate_hours')
+    ?? parseFrontmatterNumber(task.source, 'effort_hours')
+    ?? parseFrontmatterNumber(task.source, 'duration_hours');
+  if (fromHours && fromHours > 0) return Math.max(1, Math.round(fromHours));
+  return estimateTaskDurationDays(task) * iaHoursPerDay;
+}
+
+function toPlanningTask(task, iaHoursPerDay) {
+  const dependencyLinks = parseFrontmatterList(task.source, 'dependencies')
+    .map((item) => parseDependencySpec(item, iaHoursPerDay))
+    .filter((item) => item && item.id);
+  const dependencies = dependencyLinks.map((item) => item.id);
+  const createdDate = parseDateStamp(parseFrontmatterField(task.source, 'created_date')) || parseDateStamp(task.createdDate);
+  const updatedDate = parseDateStamp(parseFrontmatterField(task.source, 'updated_date'));
+  const startedDate = parseDateStamp(parseFrontmatterField(task.source, 'started_date')) || createdDate;
+  const dueDate = parseDateStamp(parseFrontmatterField(task.source, 'due_date'));
+  const durationIaHours = estimateTaskIaHours(task, iaHoursPerDay);
+  return {
+    ...task,
+    durationDays: Math.max(1, Math.round(durationIaHours / iaHoursPerDay)),
+    durationIaHours,
+    dependencies,
+    dependencyLinks,
+    createdDate,
+    startedDate,
+    updatedDate,
+    dueDate,
+  };
+}
+
+function criticalPath(nodes, dependents, pendingMap) {
+  const memo = new Map();
+  const pathMemo = new Map();
+
+  const score = (id, stack = new Set()) => {
+    if (memo.has(id)) return memo.get(id);
+    if (stack.has(id)) return pendingMap.get(id)?.durationIaHours || 1;
+    stack.add(id);
+    const node = pendingMap.get(id);
+    const children = dependents.get(id) || [];
+    let bestChild = null;
+    let bestScore = 0;
+    for (const childId of children) {
+      const childScore = score(childId, stack);
+      if (childScore > bestScore) {
+        bestScore = childScore;
+        bestChild = childId;
+      }
+    }
+    stack.delete(id);
+    const own = (node?.durationIaHours || 1) + bestScore;
+    memo.set(id, own);
+    pathMemo.set(id, bestChild);
+    return own;
+  };
+
+  let bestRoot = null;
+  let best = 0;
+  for (const node of nodes) {
+    const value = score(node.id);
+    if (value > best) {
+      best = value;
+      bestRoot = node.id;
+    }
+  }
+
+  const route = [];
+  const visited = new Set();
+  let cursor = bestRoot;
+  while (cursor && !visited.has(cursor)) {
+    visited.add(cursor);
+    const node = pendingMap.get(cursor);
+    if (!node) break;
+    route.push({
+      id: node.id,
+      title: node.title,
+      durationDays: node.durationDays,
+      durationIaHours: node.durationIaHours,
+      priority: node.priority,
+    });
+    cursor = pathMemo.get(cursor);
+  }
+  return { route, estimatedIaHours: best };
+}
+
+function buildProjectGantt(project, options = {}) {
+  const capacity = Math.max(1, Math.min(12, Number(options.capacity) || 1));
+  const includeDone = options.includeDone !== false;
+  const calendar = buildWorkingCalendar(options);
+  const iaHoursPerDay = calendar.iaHoursPerDay;
+  const tasks = projectTasks(project).map((task) => toPlanningTask(task, iaHoursPerDay));
+  const doneTasks = tasks.filter((task) => isDoneStatus(task.status));
+  const pendingTasks = tasks.filter((task) => !isDoneStatus(task.status));
+  const pendingMap = new Map(pendingTasks.map((task) => [task.id, task]));
+  const doneIds = new Set(doneTasks.map((task) => task.id));
+  const dependents = new Map();
+  const indegree = new Map();
+
+  for (const task of pendingTasks) {
+    indegree.set(task.id, 0);
+    dependents.set(task.id, []);
+  }
+
+  for (const task of pendingTasks) {
+    const pendingLinks = (task.dependencyLinks || []).filter((dep) => pendingMap.has(dep.id));
+    const pendingDeps = [...new Set(pendingLinks.map((dep) => dep.id))];
+    task.pendingDependencyLinks = pendingLinks;
+    task.pendingDependencies = pendingDeps;
+    for (const depId of pendingDeps) {
+      indegree.set(task.id, (indegree.get(task.id) || 0) + 1);
+      dependents.get(depId).push(task.id);
+    }
+  }
+
+  const prioritySort = (a, b) => {
+    const byPriority = priorityRank(a.priority) - priorityRank(b.priority);
+    if (byPriority !== 0) return byPriority;
+    const byOrdinal = (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER);
+    if (byOrdinal !== 0) return byOrdinal;
+    return a.title.localeCompare(b.title, 'es');
+  };
+
+  const running = [];
+  const schedule = new Map();
+  const completed = new Set();
+  let timelineHour = 0;
+
+  const planTask = (task, startIaHour) => {
+    const endIaHour = startIaHour + task.durationIaHours;
+    const startCalendar = calendar.toCalendarMarker(startIaHour);
+    const endCalendar = calendar.toCalendarMarker(Math.max(0, endIaHour - 1));
+    const startCalendarDay = calendar.dayDiff(calendar.startDate, startCalendar.date);
+    const endCalendarDay = calendar.dayDiff(calendar.startDate, endCalendar.date);
+    schedule.set(task.id, {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      type: task.type,
+      priority: task.priority,
+      dependencies: task.dependencies,
+      dependencyLinks: task.dependencyLinks,
+      pendingDependencies: task.pendingDependencies,
+      pendingDependencyLinks: task.pendingDependencyLinks,
+      durationDays: task.durationDays,
+      durationIaHours: task.durationIaHours,
+      startDay: startCalendar.businessDayIndex,
+      endDay: endCalendar.businessDayIndex + 1,
+      startIaHour,
+      endIaHour,
+      startDate: startCalendar.dateIso,
+      endDate: endCalendar.dateIso,
+      startCalendarDay,
+      endCalendarDay,
+      startMonth: startCalendar.monthLabel,
+      endMonth: endCalendar.monthLabel,
+      startHourInDay: startCalendar.hourInDay,
+      endHourInDay: endCalendar.hourInDay,
+      lane: String(task.type || '').toLowerCase() === 'bug' ? 'bugs' : 'mejoras',
+      canRunInParallel: task.pendingDependencies.length === 0
+        || (task.pendingDependencyLinks || []).some((dep) => dep.relation === 'SS' || dep.relation === 'FF'),
+    });
+  };
+
+  const dependencyStartConstraint = (task) => {
+    let earliestStartIaHour = 0;
+    let waitingForPredecessor = false;
+
+    for (const dep of task.pendingDependencyLinks || []) {
+      const predecessor = pendingMap.get(dep.id);
+      if (!predecessor) continue;
+      const predecessorSchedule = schedule.get(dep.id);
+      if (!predecessorSchedule) {
+        waitingForPredecessor = true;
+        continue;
+      }
+
+      const relation = String(dep.relation || 'FS').toUpperCase();
+      const lagIaHours = Number(dep.lagIaHours || 0);
+      let relationBound = predecessorSchedule.endIaHour;
+
+      if (relation === 'SS') {
+        relationBound = predecessorSchedule.startIaHour + lagIaHours;
+      } else if (relation === 'FF') {
+        relationBound = predecessorSchedule.endIaHour + lagIaHours - task.durationIaHours;
+      } else if (relation === 'SF') {
+        relationBound = predecessorSchedule.startIaHour + lagIaHours - task.durationIaHours;
+      } else {
+        relationBound = predecessorSchedule.endIaHour + lagIaHours;
+      }
+
+      earliestStartIaHour = Math.max(earliestStartIaHour, relationBound);
+    }
+
+    return {
+      earliestStartIaHour: Math.max(0, Math.round(earliestStartIaHour)),
+      waitingForPredecessor,
+    };
+  };
+
+  while (completed.size < pendingTasks.length) {
+    const finishedNow = running.filter((item) => item.endIaHour <= timelineHour);
+    for (const item of finishedNow) {
+      completed.add(item.id);
+      const index = running.findIndex((candidate) => candidate.id === item.id);
+      if (index >= 0) running.splice(index, 1);
+    }
+
+    let startedThisTick = false;
+    let canStartMore = true;
+
+    while (running.length < capacity && canStartMore) {
+      canStartMore = false;
+      const unscheduled = pendingTasks
+        .filter((task) => !schedule.has(task.id))
+        .sort(prioritySort);
+
+      for (const task of unscheduled) {
+        const constraint = dependencyStartConstraint(task);
+        if (constraint.waitingForPredecessor) continue;
+        if (timelineHour < constraint.earliestStartIaHour) continue;
+
+        planTask(task, Math.max(timelineHour, constraint.earliestStartIaHour));
+        const plannedTask = schedule.get(task.id);
+        running.push({ id: task.id, endIaHour: plannedTask.endIaHour });
+        startedThisTick = true;
+        canStartMore = true;
+        break;
+      }
+    }
+
+    if (completed.size >= pendingTasks.length) break;
+
+    if (running.length === 0 && !startedThisTick) {
+      let nextHour = Number.POSITIVE_INFINITY;
+      for (const task of pendingTasks) {
+        if (schedule.has(task.id)) continue;
+        const constraint = dependencyStartConstraint(task);
+        if (constraint.waitingForPredecessor) continue;
+        if (constraint.earliestStartIaHour > timelineHour) {
+          nextHour = Math.min(nextHour, constraint.earliestStartIaHour);
+        }
+      }
+
+      if (Number.isFinite(nextHour)) {
+        timelineHour = nextHour;
+        continue;
+      }
+
+      break;
+    }
+
+    timelineHour += 1;
+  }
+
+  const unresolved = pendingTasks.filter((task) => !schedule.has(task.id));
+  for (const task of unresolved.sort(prioritySort)) {
+    const syntheticStart = timelineHour;
+    planTask(task, syntheticStart);
+  }
+
+  const planned = [...schedule.values()].sort((a, b) => a.startDay - b.startDay || priorityRank(a.priority) - priorityRank(b.priority));
+  const byStartHour = new Map();
+  for (const item of planned) {
+    if (!byStartHour.has(item.startIaHour)) byStartHour.set(item.startIaHour, []);
+    byStartHour.get(item.startIaHour).push(item.id);
+  }
+
+  const parallelGroups = [...byStartHour.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([startIaHour, ids]) => {
+      const marker = calendar.toCalendarMarker(startIaHour);
+      return {
+        startIaHour,
+        startDay: marker.businessDayIndex,
+        startDate: marker.dateIso,
+        ids,
+      };
+    });
+
+  const critical = criticalPath(pendingTasks, dependents, pendingMap);
+  const total = tasks.length;
+  const done = doneTasks.length;
+  const completionRate = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const doneTimeline = includeDone
+    ? doneTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      durationDays: task.durationDays,
+      durationIaHours: task.durationIaHours,
+      startDay: 0,
+      endDay: task.durationDays,
+      startIaHour: 0,
+      endIaHour: task.durationIaHours,
+      startDate: calendar.startDateIso,
+      endDate: calendar.startDateIso,
+      lane: String(task.type || '').toLowerCase() === 'bug' ? 'bugs' : 'mejoras',
+      completedAt: task.updatedDate ? task.updatedDate.toISOString() : null,
+    }))
+    : [];
+
+  const dependencyEdges = pendingTasks.flatMap((task) =>
+    (task.pendingDependencyLinks || []).map((dep) => ({
+      fromId: dep.id,
+      toId: task.id,
+      relation: dep.relation,
+      fromAnchor: dep.fromAnchor,
+      toAnchor: dep.toAnchor,
+      lagBusinessDays: dep.lagBusinessDays,
+      lagIaHours: dep.lagIaHours,
+      sequential: dep.sequential,
+    }))
+  );
+
+  const monthMarkers = [];
+  const maxHour = planned.reduce((max, item) => Math.max(max, item.endIaHour), 0);
+  const totalBusinessDays = Math.max(1, Math.ceil(maxHour / iaHoursPerDay));
+  const dayMarkers = [];
+  const preCalendarPaddingDays = 120;
+  const maxCalendarDate = planned.reduce((max, task) => {
+    const end = parseStartDate(task.endDate);
+    return end > max ? end : max;
+  }, parseStartDate(calendar.startDateIso));
+  const totalCalendarDays = Math.max(180, calendar.dayDiff(calendar.startDate, maxCalendarDate) + 1 + preCalendarPaddingDays);
+  for (let dayIndex = 0; dayIndex < totalCalendarDays; dayIndex += 1) {
+    const date = new Date(calendar.startDate);
+    date.setDate(calendar.startDate.getDate() + dayIndex - preCalendarPaddingDays);
+    const isWorking = calendar.isWorkingDay(date);
+    const iso = toDateOnlyIso(date);
+    dayMarkers.push({
+      dayIndex,
+      date: iso,
+      monthKey: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+      monthLabel: date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }),
+      dayLabel: date.toLocaleDateString('es-CO', { weekday: 'short' }),
+      dayNumber: date.getDate(),
+      isWorking,
+      isSaturday: date.getDay() === 6,
+      isSunday: date.getDay() === 0,
+      isHoliday: calendar.holidays.includes(iso),
+    });
+  }
+
+  for (const task of planned) {
+    task.startCalendarDay += preCalendarPaddingDays;
+    task.endCalendarDay += preCalendarPaddingDays;
+  }
+  const seenMonths = new Set();
+  for (const marker of dayMarkers) {
+    if (seenMonths.has(marker.monthKey)) continue;
+    seenMonths.add(marker.monthKey);
+    monthMarkers.push({
+      monthKey: marker.monthKey,
+      monthLabel: marker.monthLabel,
+      atIaHour: marker.dayIndex * iaHoursPerDay,
+      atBusinessDay: marker.dayIndex,
+      atCalendarDay: marker.dayIndex,
+      date: marker.date,
+    });
+  }
+
+  return {
+    project: { slug: project.slug, name: project.name },
+    parameters: {
+      capacity,
+      includeDone,
+      iaHoursPerDay,
+      startDate: calendar.startDateIso,
+      holidays: calendar.holidays,
+      workOnSaturday: calendar.workOnSaturday,
+    },
+    summary: {
+      totalTasks: total,
+      doneTasks: done,
+      pendingTasks: pendingTasks.length,
+      completionRate,
+      estimatedPendingIaHours: planned.reduce((max, item) => Math.max(max, item.endIaHour), 0),
+      estimatedPendingDays: planned.reduce((max, item) => Math.max(max, item.endDay), 0),
+      blockedByDependencies: pendingTasks.filter((task) => task.pendingDependencies.length > 0).length,
+      unresolvedDependencies: pendingTasks.filter((task) =>
+        (task.dependencyLinks || []).some((dep) => !pendingMap.has(dep.id) && !doneIds.has(dep.id))
+      ).length,
+      cycleDetected: unresolved.length > 0,
+    },
+    criticalPath: critical,
+    parallelGroups,
+    dependencyEdges,
+    monthMarkers,
+    dayMarkers,
+    tasks: planned,
+    doneTimeline,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 function summarize(project) {
   const tasks = projectTasks(project);
   const bugs = tasks.filter(isBugTask);
@@ -218,6 +884,389 @@ function json(res, status, body) {
 
 function body(req) {
   return new Promise((resolve, reject) => { let data = ''; req.on('data', (chunk) => { data += chunk; }); req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (error) { reject(error); } }); req.on('error', reject); });
+}
+
+function aiCapacityConfigPath(project) {
+  return path.join(project.path, 'backlog', 'docs', 'ai-capacity.config.json');
+}
+
+function readAiCapacityConfig(project) {
+  const file = aiCapacityConfigPath(project);
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeAiCapacityConfig(project, config) {
+  const file = aiCapacityConfigPath(project);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  return config;
+}
+
+function normalizeAiOperators(operators) {
+  if (!Array.isArray(operators)) return [];
+  const seen = new Set();
+  const normalized = [];
+  for (const raw of operators) {
+    const id = String(raw?.id || '').trim() || slugify(String(raw?.name || '').trim());
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    normalized.push({
+      id,
+      name: String(raw?.name || id).trim(),
+      active: raw?.active !== false,
+      maxParallel: Math.max(1, Math.min(6, Number(raw?.maxParallel) || 1)),
+      hoursPerDay: Math.max(1, Math.min(24, Number(raw?.hoursPerDay) || 8)),
+    });
+  }
+  return normalized;
+}
+
+function normalizeAiCapacityConfigPayload(data) {
+  const capacity = Math.max(1, Math.min(12, Number(data?.capacity) || 1));
+  const operators = normalizeAiOperators(data?.operators);
+  const operatorById = new Map(operators.map((operator) => [operator.id, operator]));
+  const operatorIdByName = new Map(
+    operators
+      .filter((operator) => operator.name)
+      .map((operator) => [operator.name.trim().toLowerCase(), operator.id])
+  );
+
+  const aiModels = (Array.isArray(data?.aiModels) ? data.aiModels : [])
+    .map((model) => {
+      let operatorId = String(model?.operatorId || '').trim();
+      let operatorName = String(model?.operatorName || '').trim();
+
+      if (!operatorId && operatorName) {
+        operatorId = operatorIdByName.get(operatorName.toLowerCase()) || '';
+      }
+
+      if (operatorId && operatorById.has(operatorId)) {
+        operatorName = operatorById.get(operatorId).name;
+      }
+
+      return {
+        key: String(model?.key || '').trim(),
+        name: String(model?.name || '').trim(),
+        initials: String(model?.initials || '').trim(),
+        maxParallel: Math.max(1, Math.min(6, Number(model?.maxParallel) || 1)),
+        requiresOperator: Boolean(model?.requiresOperator),
+        operatorId,
+        operatorName,
+        enabled: Boolean(model?.enabled),
+      };
+    })
+    .filter((model) => model.key);
+
+  return {
+    version: Math.max(1, Number(data?.version) || 1),
+    capacity,
+    aiModels,
+    operators,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function effectiveCapacityFromConfig(config, fallbackCapacity) {
+  const fallback = Math.max(1, Math.min(12, Number(fallbackCapacity) || 2));
+  if (!config || typeof config !== 'object') return fallback;
+
+  const humanCapacity = Math.max(1, Math.min(12, Number(config.capacity) || fallback));
+  const models = Array.isArray(config.aiModels) ? config.aiModels : [];
+  const enabledModels = models.filter((model) => model?.enabled !== false);
+  const modelSlots = Math.max(1, enabledModels.reduce((sum, model) => sum + Math.max(1, Math.min(6, Number(model.maxParallel) || 1)), 0));
+
+  const modelsNeedingOperator = enabledModels.filter((model) => Boolean(model.requiresOperator));
+  const operators = normalizeAiOperators(config.operators);
+  const activeOperatorSlots = operators
+    .filter((operator) => operator.active)
+    .reduce((sum, operator) => sum + Math.max(1, Math.min(6, Number(operator.maxParallel) || 1)), 0);
+  const operatorBound = modelsNeedingOperator.length > 0 ? Math.max(1, activeOperatorSlots || 1) : modelSlots;
+
+  return Math.max(1, Math.min(humanCapacity, modelSlots, operatorBound));
+}
+
+function normalizeTextKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function rowLooksLikeBug(row) {
+  const type = normalizeTextKey(row.type);
+  if (type === 'bug') return true;
+  const labels = Array.isArray(row.labels) ? row.labels.map((label) => normalizeTextKey(label)) : [];
+  if (labels.includes('bug')) return true;
+  return /^bug\b/i.test(String(row.title || '').trim());
+}
+
+function normalizeImportRows(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.tasks)) return data.tasks;
+  return [];
+}
+
+function normalizePriorityInput(value) {
+  const key = normalizeTextKey(value || 'medium');
+  if (key === 'ultra high' || key === 'ultrahigh') return 'Ultra High';
+  if (key === 'high') return 'High';
+  if (key === 'low') return 'Low';
+  return 'Medium';
+}
+
+function parseListValue(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function upsertFrontmatterScalar(source, field, value) {
+  const text = String(source || '');
+  const match = text.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return text;
+  const lines = match[1].split('\n');
+  const index = lines.findIndex((line) => new RegExp(`^${field}:\\s*`).test(line));
+  const rendered = typeof value === 'number' ? `${field}: ${value}` : `${field}: '${String(value).replace(/'/g, "''")}'`;
+  if (index >= 0) lines[index] = rendered;
+  else lines.push(rendered);
+  const next = `---\n${lines.join('\n')}\n---`;
+  return `${next}${text.slice(match[0].length)}`;
+}
+
+function upsertFrontmatterList(source, field, values) {
+  const text = String(source || '');
+  const match = text.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return text;
+  const list = [...new Set(values.map((item) => String(item).trim()).filter(Boolean))];
+  const lines = match[1].split('\n');
+  const start = lines.findIndex((line) => new RegExp(`^${field}:\\s*$`).test(line));
+  if (start >= 0) {
+    let end = start + 1;
+    while (end < lines.length && /^\s*-\s+/.test(lines[end])) end += 1;
+    const replacement = list.length ? [ `${field}:`, ...list.map((item) => `  - ${item}`) ] : [];
+    lines.splice(start, end - start, ...replacement);
+  } else if (list.length) {
+    lines.push(`${field}:`, ...list.map((item) => `  - ${item}`));
+  }
+  const next = `---\n${lines.join('\n')}\n---`;
+  return `${next}${text.slice(match[0].length)}`;
+}
+
+function enrichTaskSource(source, row) {
+  let next = String(source || '');
+  const estimateIaHours = Number(row.estimateIaHours ?? row.estimate_ia_hours ?? row.estimate_hours);
+  const estimateDays = Number(row.estimateDays ?? row.estimate_days);
+  const dependencies = parseListValue(row.dependencies);
+  const assignees = parseListValue(row.assignees || row.assignee);
+  const epic = String(row.epic || '').trim();
+  const startedDate = String(row.started_date || '').trim();
+  const dueDate = String(row.due_date || '').trim();
+
+  if (Number.isFinite(estimateIaHours) && estimateIaHours > 0) next = upsertFrontmatterScalar(next, 'estimate_ia_hours', Math.round(estimateIaHours));
+  if (Number.isFinite(estimateDays) && estimateDays > 0) next = upsertFrontmatterScalar(next, 'estimate_days', Math.round(estimateDays));
+  if (dependencies.length) next = upsertFrontmatterList(next, 'dependencies', dependencies);
+  if (assignees.length) next = upsertFrontmatterList(next, 'assignee', assignees);
+  if (epic) next = upsertFrontmatterScalar(next, 'epic', epic);
+  if (startedDate) next = upsertFrontmatterScalar(next, 'started_date', startedDate);
+  if (dueDate) next = upsertFrontmatterScalar(next, 'due_date', dueDate);
+  return next;
+}
+
+function normalizeBulkTaskUpdates(input) {
+  const updates = input && typeof input === 'object' ? input : {};
+  const patch = {};
+
+  const estimateIaRaw = updates.estimateIaHours ?? updates.estimate_ia_hours ?? updates.estimate_hours;
+  if (estimateIaRaw !== undefined && estimateIaRaw !== null && String(estimateIaRaw).trim() !== '') {
+    const estimateIaHours = Number(estimateIaRaw);
+    if (!Number.isFinite(estimateIaHours) || estimateIaHours <= 0) {
+      throw new Error('estimateIaHours debe ser un número mayor que cero');
+    }
+    patch.estimateIaHours = Math.max(1, Math.round(estimateIaHours));
+  }
+
+  const estimateDaysRaw = updates.estimateDays ?? updates.estimate_days;
+  if (estimateDaysRaw !== undefined && estimateDaysRaw !== null && String(estimateDaysRaw).trim() !== '') {
+    const estimateDays = Number(estimateDaysRaw);
+    if (!Number.isFinite(estimateDays) || estimateDays <= 0) {
+      throw new Error('estimateDays debe ser un número mayor que cero');
+    }
+    patch.estimateDays = Math.max(1, Math.round(estimateDays));
+  }
+
+  const startedDateRaw = updates.startedDate ?? updates.started_date;
+  if (startedDateRaw !== undefined && startedDateRaw !== null && String(startedDateRaw).trim() !== '') {
+    const startedDate = String(startedDateRaw).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startedDate)) {
+      throw new Error('startedDate debe tener formato YYYY-MM-DD');
+    }
+    patch.startedDate = startedDate;
+  }
+
+  const dueDateRaw = updates.dueDate ?? updates.due_date;
+  if (dueDateRaw !== undefined && dueDateRaw !== null && String(dueDateRaw).trim() !== '') {
+    const dueDate = String(dueDateRaw).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      throw new Error('dueDate debe tener formato YYYY-MM-DD');
+    }
+    patch.dueDate = dueDate;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'assignees') || Object.prototype.hasOwnProperty.call(updates, 'assignee')) {
+    patch.assignees = parseListValue(updates.assignees ?? updates.assignee);
+  }
+
+  return patch;
+}
+
+function applyBulkTaskUpdatesToSource(source, updates) {
+  let next = String(source || '');
+  if (Number.isFinite(updates.estimateIaHours) && updates.estimateIaHours > 0) {
+    next = upsertFrontmatterScalar(next, 'estimate_ia_hours', updates.estimateIaHours);
+  }
+  if (Number.isFinite(updates.estimateDays) && updates.estimateDays > 0) {
+    next = upsertFrontmatterScalar(next, 'estimate_days', updates.estimateDays);
+  }
+  if (updates.startedDate) next = upsertFrontmatterScalar(next, 'started_date', updates.startedDate);
+  if (updates.dueDate) next = upsertFrontmatterScalar(next, 'due_date', updates.dueDate);
+  if (Object.prototype.hasOwnProperty.call(updates, 'assignees')) {
+    next = upsertFrontmatterList(next, 'assignee', updates.assignees);
+  }
+  return next;
+}
+
+function bulkEditProjectTasks(project, payload = {}) {
+  const rawIds = Array.isArray(payload.taskIds) ? payload.taskIds : [];
+  const taskIds = [...new Set(rawIds.map((item) => String(item || '').trim()).filter(Boolean))];
+  if (!taskIds.length) throw new Error('taskIds es requerido y no puede estar vacío');
+
+  const updates = normalizeBulkTaskUpdates(payload.updates || {});
+  const updateKeys = Object.keys(updates);
+  if (!updateKeys.length) throw new Error('updates no contiene campos válidos para editar');
+
+  const dryRun = Boolean(payload.dryRun);
+  const updated = [];
+  const skipped = [];
+  const errors = [];
+
+  for (const taskId of taskIds) {
+    try {
+      const task = findTask(project, taskId);
+      if (!task) {
+        skipped.push({ id: taskId, reason: 'task_not_found' });
+        continue;
+      }
+
+      const filePath = resolveTaskFilePath(project, task);
+      const original = fs.readFileSync(filePath, 'utf8');
+      let next = applyBulkTaskUpdatesToSource(original, updates);
+      if (next === original) {
+        skipped.push({ id: task.id, reason: 'no_changes' });
+        continue;
+      }
+
+      next = touchUpdatedDate(validateTaskSource(task.id, next));
+      if (!dryRun) fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+
+      updated.push({
+        id: task.id,
+        file: task.file,
+        changes: updateKeys,
+      });
+    } catch (error) {
+      errors.push({ id: taskId, reason: error.message });
+    }
+  }
+
+  return {
+    project: project.slug,
+    dryRun,
+    received: taskIds.length,
+    updateKeys,
+    updatedCount: updated.length,
+    skippedCount: skipped.length,
+    errorCount: errors.length,
+    updated,
+    skipped,
+    errors,
+  };
+}
+
+function importImprovements(project, payload = {}) {
+  const rows = normalizeImportRows(payload);
+  const dryRun = Boolean(payload?.dryRun);
+  const existing = projectTasks(project);
+  const existingKeys = new Set(existing.map((task) => normalizeTextKey(task.title)));
+  const seenBatch = new Set();
+  const created = [];
+  const skipped = [];
+  const errors = [];
+
+  rows.forEach((raw, index) => {
+    const row = raw && typeof raw === 'object' ? raw : {};
+    const title = String(row.title || row.titulo || '').trim();
+    if (!title) {
+      errors.push({ index, reason: 'titulo_requerido' });
+      return;
+    }
+    if (rowLooksLikeBug(row)) {
+      errors.push({ index, title, reason: 'fila_detectada_como_bug' });
+      return;
+    }
+
+    const key = normalizeTextKey(title);
+    if (seenBatch.has(key)) {
+      skipped.push({ index, title, reason: 'duplicado_en_lote' });
+      return;
+    }
+    if (existingKeys.has(key)) {
+      skipped.push({ index, title, reason: 'duplicado_en_backlog' });
+      return;
+    }
+    seenBatch.add(key);
+
+    const createPayload = {
+      title,
+      type: 'enhancement',
+      priority: normalizePriorityInput(row.priority),
+      labels: parseListValue(row.labels).filter((label) => normalizeTextKey(label) !== 'bug'),
+    };
+
+    if (dryRun) {
+      created.push({ index, title, dryRun: true, payload: createPayload });
+      return;
+    }
+
+    try {
+      const task = createTask(project, createPayload);
+      const enriched = enrichTaskSource(task.source, row);
+      let finalTask = task;
+      if (enriched !== task.source) finalTask = updateTaskSource(project, task.id, enriched);
+      created.push({ index, id: finalTask.id, title: finalTask.title, file: finalTask.file });
+      existingKeys.add(key);
+    } catch (error) {
+      errors.push({ index, title, reason: error.message });
+    }
+  });
+
+  return {
+    project: project.slug,
+    dryRun,
+    received: rows.length,
+    createdCount: created.length,
+    skippedCount: skipped.length,
+    errorCount: errors.length,
+    created,
+    skipped,
+    errors,
+  };
 }
 
 function initProject(project) {
@@ -427,6 +1476,81 @@ function updateTaskSource(project, taskId, source) {
   const next = touchUpdatedDate(validateTaskSource(task.id, source));
   fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
   return { ...parseTask(filePath), file: task.file, source: next };
+}
+
+function dependencyTokenFromPayloadEntry(entry) {
+  if (typeof entry === 'string') return String(entry).trim();
+  if (!entry || typeof entry !== 'object') return '';
+
+  const id = String(entry.id || '').trim();
+  if (!id) return '';
+
+  const relation = String(entry.relation || 'FS').trim().toUpperCase();
+  if (!['FS', 'SS', 'FF', 'SF'].includes(relation)) {
+    throw new Error(`relación inválida para dependencia: ${relation}`);
+  }
+
+  const lagRaw = entry.lagValue ?? entry.lag ?? 0;
+  const lagValue = Math.round(Number(lagRaw || 0));
+  const unit = String(entry.lagUnit || entry.unit || 'd').trim().toLowerCase() === 'h' ? 'h' : 'd';
+  const lagToken = Number.isFinite(lagValue) && lagValue !== 0
+    ? `${lagValue > 0 ? `+${lagValue}` : String(lagValue)}${unit}`
+    : '';
+
+  return `${id}:${relation}${lagToken}`;
+}
+
+function serializeDependencySpec(spec, iaHoursPerDay = 8) {
+  const relation = String(spec.relation || 'FS').toUpperCase();
+  const lagHours = Math.round(Number(spec.lagIaHours || 0));
+  if (!Number.isFinite(lagHours) || lagHours === 0) return `${spec.id}:${relation}`;
+
+  if (iaHoursPerDay > 0 && lagHours % iaHoursPerDay === 0) {
+    const lagDays = lagHours / iaHoursPerDay;
+    return `${spec.id}:${relation}${lagDays > 0 ? `+${lagDays}` : String(lagDays)}d`;
+  }
+
+  return `${spec.id}:${relation}${lagHours > 0 ? `+${lagHours}` : String(lagHours)}h`;
+}
+
+function updateTaskDependencies(project, taskId, dependenciesInput) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+  const filePath = resolveTaskFilePath(project, task);
+
+  const rawList = Array.isArray(dependenciesInput) ? dependenciesInput : [];
+  const normalizedTokens = [];
+  const seen = new Set();
+
+  for (const raw of rawList) {
+    const token = dependencyTokenFromPayloadEntry(raw);
+    if (!token) continue;
+    const spec = parseDependencySpec(token, 8);
+    if (!spec || !spec.id) throw new Error(`dependencia inválida: ${token}`);
+    if (spec.id.toLowerCase() === String(taskId).toLowerCase()) {
+      throw new Error('una tarea no puede depender de sí misma');
+    }
+    const rendered = serializeDependencySpec(spec, 8);
+    const key = rendered.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalizedTokens.push(rendered);
+  }
+
+  const source = fs.readFileSync(filePath, 'utf8');
+  const updated = upsertFrontmatterList(source, 'dependencies', normalizedTokens);
+  const next = touchUpdatedDate(validateTaskSource(task.id, updated));
+  fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+
+  const parsed = parseTask(filePath);
+  const planning = toPlanningTask({ ...parsed, source: next }, 8);
+  return {
+    ...parsed,
+    file: task.file,
+    source: next,
+    dependencies: planning.dependencies,
+    dependencyLinks: planning.dependencyLinks,
+  };
 }
 
 function updateTaskChecklist(project, taskId, checkIndex, checked) {
@@ -768,8 +1892,90 @@ document.querySelector('.close').onclick=()=>modal.classList.remove('open');moda
 }
 
 async function handle(req, res) {
+  res.setHeader('access-control-allow-origin', '*');
+  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  res.setHeader('access-control-allow-headers', 'content-type');
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   if (req.method === 'GET' && url.pathname === '/api/projects') return json(res, 200, readCatalog().map(summarize));
+  if (req.method === 'GET' && url.pathname === '/api/hub-config') {
+    return json(res, 200, {
+      ganttBaseUrl: GANTT_BASE_URL,
+      hubPort: PORT,
+      boardPort: BOARD_PORT,
+    });
+  }
+  const gantt = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt$/);
+  if (req.method === 'GET' && gantt) {
+    const project = readCatalog().find((item) => item.slug === gantt[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    const config = readAiCapacityConfig(project);
+    const queryCapacity = url.searchParams.get('capacity');
+    const capacity = queryCapacity
+      ? Number(queryCapacity || '2')
+      : effectiveCapacityFromConfig(config, 2);
+    const includeDone = url.searchParams.get('includeDone') !== '0';
+    const iaHoursPerDay = Number(url.searchParams.get('iaHoursPerDay') || '8');
+    const startDate = url.searchParams.get('startDate') || '';
+    const holidays = (url.searchParams.get('holidays') || '').split(',').map((item) => item.trim()).filter(Boolean);
+    const workOnSaturday = url.searchParams.get('workOnSaturday') === '1';
+    return json(res, 200, buildProjectGantt(project, {
+      capacity,
+      includeDone,
+      iaHoursPerDay,
+      startDate,
+      holidays,
+      workOnSaturday,
+    }));
+  }
+  const aiCapacity = url.pathname.match(/^\/api\/projects\/([^/]+)\/ai-capacity-config$/);
+  if (req.method === 'GET' && aiCapacity) {
+    const project = readCatalog().find((item) => item.slug === aiCapacity[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    const config = readAiCapacityConfig(project);
+    return json(res, 200, { project: project.slug, config });
+  }
+  if (req.method === 'POST' && aiCapacity) {
+    const project = readCatalog().find((item) => item.slug === aiCapacity[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      if (!data || typeof data !== 'object') return json(res, 400, { error: 'invalid payload' });
+      const normalized = normalizeAiCapacityConfigPayload(data);
+      writeAiCapacityConfig(project, normalized);
+      return json(res, 200, { project: project.slug, config: normalized });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  const aiOperators = url.pathname.match(/^\/api\/projects\/([^/]+)\/ai-operators$/);
+  if (req.method === 'GET' && aiOperators) {
+    const project = readCatalog().find((item) => item.slug === aiOperators[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    const config = readAiCapacityConfig(project) || normalizeAiCapacityConfigPayload({});
+    return json(res, 200, { project: project.slug, operators: normalizeAiOperators(config.operators) });
+  }
+  if (req.method === 'POST' && aiOperators) {
+    const project = readCatalog().find((item) => item.slug === aiOperators[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const current = readAiCapacityConfig(project) || normalizeAiCapacityConfigPayload({});
+      const next = {
+        ...current,
+        operators: normalizeAiOperators(data?.operators),
+        version: Math.max(1, Number(current.version) || 1) + 1,
+        updatedAt: new Date().toISOString(),
+      };
+      writeAiCapacityConfig(project, next);
+      return json(res, 200, { project: project.slug, operators: next.operators, config: next });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/projects') {
     try {
       const data = await body(req); const projects = readCatalog(); const name = String(data.name || '').trim();
@@ -793,6 +1999,44 @@ async function handle(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  const importTasks = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/import$/);
+  if (req.method === 'POST' && importTasks) {
+    const project = readCatalog().find((item) => item.slug === importTasks[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const report = importImprovements(project, data || {});
+      return json(res, 200, report);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  const bulkEditTasks = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/bulk-edit$/);
+  if (req.method === 'POST' && bulkEditTasks) {
+    const project = readCatalog().find((item) => item.slug === bulkEditTasks[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const report = bulkEditProjectTasks(project, data || {});
+      return json(res, 200, report);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  const taskDependencies = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/dependencies$/);
+  if (req.method === 'POST' && taskDependencies) {
+    const project = readCatalog().find((item) => item.slug === taskDependencies[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const taskId = String(data?.id || '').trim();
+      if (!taskId) return json(res, 400, { error: 'id is required' });
+      const updated = updateTaskDependencies(project, taskId, data?.dependencies);
+      return json(res, 200, updated);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (req.method === 'GET') {
     const asset = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     const file = path.resolve(WEB, asset);
@@ -805,6 +2049,13 @@ async function handle(req, res) {
 }
 
 async function handleBoard(req, res) {
+  res.setHeader('access-control-allow-origin', '*');
+  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  res.setHeader('access-control-allow-headers', 'content-type');
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
   const url = new URL(req.url, `http://${HOST}:${BOARD_PORT}`);
   const projects = readCatalog();
   const project = projects.find((item) => item.slug === url.searchParams.get('project')) || projects[0];
@@ -897,6 +2148,15 @@ async function handleBoard(req, res) {
       return json(res, 400, { error: error.message });
     }
   }
+  if (req.method === 'POST' && url.pathname === '/api/tasks/import') {
+    try {
+      const data = await body(req);
+      const report = importImprovements(project, data || {});
+      return json(res, 200, report);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/tasks/delete') {
     try {
       const data = await body(req);
@@ -957,4 +2217,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements };

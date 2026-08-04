@@ -1,6 +1,7 @@
 node_modules/
 projects.json
 projects/
+dist/
 tmp/
 .DS_Store
 .cursor/

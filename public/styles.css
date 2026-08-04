@@ -240,6 +240,27 @@ h1 {
   border: 1px solid #ffffff22;
 }
 
+.card-actions {
+  margin-top: 12px;
+}
+
+.btn-gantt {
+  width: 100%;
+  border: 1px solid #34c99a66;
+  background: linear-gradient(120deg, #0f2f3e, #12495e);
+  color: #a8ffe2;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-gantt:hover {
+  border-color: #5de7bcaa;
+  color: #d7fff2;
+}
+
 .btn-primary, .btn-secondary {
   border: 0;
   border-radius: 12px;

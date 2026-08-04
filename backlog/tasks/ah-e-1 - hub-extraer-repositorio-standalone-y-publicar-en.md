@@ -19,7 +19,7 @@ ordinal: 10
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Mover el Hub, skill, planes y proyecto interno fuera de JurisMate hacia `/Users/mauriciootalvaro/Code/Ariadne` y publicarlo en `mincho77/Ariadne`.
+Mover el Hub, skill, planes y proyecto interno fuera de JurisMate hacia `/Users/TU_USUARIO/Code/Ariadne` y publicarlo en `mincho77/Ariadne`.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

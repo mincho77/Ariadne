@@ -1,4 +1,97 @@
-const test = require('node:test'); const assert = require('node:assert/strict'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, projectTasks } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+const test = require('node:test'); const assert = require('node:assert/strict'); const { once } = require('node:events'); const { spawn } = require('node:child_process'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, updateTaskDependencies, projectTasks, buildProjectGantt } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+
+async function reservePort() {
+  const net = require('node:net');
+  const server = net.createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const { port } = server.address();
+  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  return port;
+}
+
+async function waitForHttp(url, timeoutMs = 6000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return;
+    } catch {
+      // Server is still booting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  throw new Error(`Server did not become ready: ${url}`);
+}
+
+async function stopProcess(child, timeoutMs = 1500) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  child.kill('SIGTERM');
+  const exited = await Promise.race([
+    once(child, 'exit').then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
+  if (!exited && child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGKILL');
+    await once(child, 'exit').catch(() => undefined);
+  }
+}
+
+function createDependencyHttpSandbox(prefix = 'ariadne-http-deps-') {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const projectRoot = path.join(sandbox, 'project');
+  const tasksDir = path.join(projectRoot, 'backlog', 'tasks');
+  fs.mkdirSync(tasksDir, { recursive: true });
+  fs.writeFileSync(path.join(tasksDir, 'jm-e-1 - Base.md'), '---\nid: JM-E-1\ntitle: Base\nstatus: To Do\npriority: Medium\ntype: feature\n---\n');
+  fs.writeFileSync(path.join(tasksDir, 'jm-e-2 - Child.md'), '---\nid: JM-E-2\ntitle: Child\nstatus: To Do\npriority: Medium\ntype: feature\ndependencies:\n  - JM-E-1\n---\n');
+  const catalogPath = path.join(sandbox, 'projects.json');
+  fs.writeFileSync(catalogPath, `${JSON.stringify([
+    {
+      slug: 'demo-http',
+      name: 'Demo HTTP',
+      path: projectRoot,
+      port: 6521,
+    },
+  ], null, 2)}\n`);
+  return { sandbox, projectRoot, tasksDir, catalogPath };
+}
+
+function createAiCapacityHttpSandbox(prefix = 'ariadne-http-ai-capacity-') {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const projectRoot = path.join(sandbox, 'project');
+  const tasksDir = path.join(projectRoot, 'backlog', 'tasks');
+  fs.mkdirSync(tasksDir, { recursive: true });
+  fs.writeFileSync(path.join(tasksDir, 'jm-e-1 - One.md'), '---\nid: JM-E-1\ntitle: One\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 2\n---\n');
+  fs.writeFileSync(path.join(tasksDir, 'jm-e-2 - Two.md'), '---\nid: JM-E-2\ntitle: Two\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 2\n---\n');
+  const catalogPath = path.join(sandbox, 'projects.json');
+  fs.writeFileSync(catalogPath, `${JSON.stringify([
+    {
+      slug: 'demo-http',
+      name: 'Demo HTTP',
+      path: projectRoot,
+      port: 6521,
+    },
+  ], null, 2)}\n`);
+  return { sandbox, projectRoot, tasksDir, catalogPath };
+}
+
+async function startHttpServerForTest(catalogPath) {
+  const port = await reservePort();
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: __dirname,
+    env: {
+      ...process.env,
+      ARIADNE_HUB_PORT: String(port),
+      ARIADNE_BOARD_PORT: String(port),
+      ARIADNE_CATALOG_PATH: catalogPath,
+    },
+    stdio: 'ignore',
+  });
+  await waitForHttp(`http://127.0.0.1:${port}/api/projects`);
+  return { port, child };
+}
 test('slugify produces stable local ids', () => assert.equal(slugify('JurisMate IA / Tokens'), 'jurismate-ia-tokens'));
 test('parseTask reads Backlog id, status and metadata', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'ARIADNE-1 - Demo.md'); fs.writeFileSync(file, '---\nid: ARIADNE-1\nstatus: In Progress\npriority: Ultra High\ntype: bug\nordinal: 1000\n---\n'); assert.deepEqual(parseTask(file), { id: 'ARIADNE-1', title: 'Demo', status: 'In Progress', priority: 'Ultra High', type: 'bug', ordinal: 1000, labels: [], createdDate: '', substatus: '', nextAction: '', effectiveSubstatus: 'En Curso' }); });
 test('parseTask unfolds YAML multiline titles', () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-task-')); const file = path.join(dir, 'JM-19 - Pretensiones.md'); fs.writeFileSync(file, '---\nid: JM-19\ntitle: >-\n  BUG producción · Justo no resuelve extracción\n  de pretensiones\nstatus: To Do\n---\n'); assert.equal(parseTask(file).title, 'BUG producción · Justo no resuelve extracción de pretensiones'); });
@@ -122,4 +215,322 @@ test('createTask allocates typed bug and enhancement ids', () => {
   const enhancement = createTask(project, { title: 'Mejora ranking', type: 'feature', priority: 'High' });
   assert.equal(bug.id, 'JM-B-1');
   assert.equal(enhancement.id, 'JM-E-1');
+});
+
+test('buildProjectGantt schedules dependencies before dependents', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-gantt-deps-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-e-1 - Base.md'), '---\nid: JM-E-1\ntitle: Base\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 2\ndependencies: []\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-2 - API.md'), '---\nid: JM-E-2\ntitle: API\nstatus: To Do\npriority: High\ntype: feature\nestimate_days: 3\ndependencies:\n  - JM-E-1\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-3 - UI.md'), '---\nid: JM-E-3\ntitle: UI\nstatus: To Do\npriority: High\ntype: feature\nestimate_days: 2\ndependencies:\n  - JM-E-2\n---\n');
+  const plan = buildProjectGantt({ slug: 'demo', name: 'Demo', path: root }, { capacity: 2 });
+  const byId = new Map(plan.tasks.map((task) => [task.id, task]));
+  assert.ok(byId.get('JM-E-1').startDay <= byId.get('JM-E-2').startDay);
+  assert.ok(byId.get('JM-E-2').startDay <= byId.get('JM-E-3').startDay);
+  assert.equal(plan.summary.pendingTasks, 3);
+  assert.ok(plan.criticalPath.route.length >= 2);
+  assert.ok(plan.criticalPath.estimatedIaHours >= 1);
+  assert.ok(plan.dependencyEdges.length >= 2);
+});
+
+test('buildProjectGantt uses capacity to unlock parallel work', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-gantt-cap-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-e-1 - A.md'), '---\nid: JM-E-1\ntitle: A\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 2\ndependencies: []\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-2 - B.md'), '---\nid: JM-E-2\ntitle: B\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 2\ndependencies: []\n---\n');
+  const serial = buildProjectGantt({ slug: 'demo', name: 'Demo', path: root }, { capacity: 1 });
+  const parallel = buildProjectGantt({ slug: 'demo', name: 'Demo', path: root }, { capacity: 2 });
+  assert.ok(serial.summary.estimatedPendingDays > parallel.summary.estimatedPendingDays);
+  assert.ok(parallel.parallelGroups.length >= 1);
+});
+
+test('buildProjectGantt enforces FS/SS/FF/SF constraints with lag', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-gantt-rel-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-e-1 - Base.md'), '---\nid: JM-E-1\ntitle: Base\nstatus: To Do\npriority: High\ntype: feature\nestimate_days: 2\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-2 - SS.md'), '---\nid: JM-E-2\ntitle: SS\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 1\ndependencies:\n  - JM-E-1:SS+1d\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-3 - FS.md'), '---\nid: JM-E-3\ntitle: FS\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 1\ndependencies:\n  - JM-E-1:FS\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-4 - FF.md'), '---\nid: JM-E-4\ntitle: FF\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 1\ndependencies:\n  - JM-E-1:FF+1d\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-5 - SF.md'), '---\nid: JM-E-5\ntitle: SF\nstatus: To Do\npriority: Medium\ntype: feature\nestimate_days: 1\ndependencies:\n  - JM-E-1:SF+1d\n---\n');
+
+  const plan = buildProjectGantt({ slug: 'demo', name: 'Demo', path: root }, { capacity: 5, iaHoursPerDay: 8 });
+  const byId = new Map(plan.tasks.map((task) => [task.id, task]));
+  const base = byId.get('JM-E-1');
+  const ss = byId.get('JM-E-2');
+  const fsTask = byId.get('JM-E-3');
+  const ff = byId.get('JM-E-4');
+  const sf = byId.get('JM-E-5');
+
+  assert.ok(ss.startIaHour >= base.startIaHour + 8);
+  assert.ok(fsTask.startIaHour >= base.endIaHour);
+  assert.ok(ff.endIaHour >= base.endIaHour + 8);
+  assert.ok(sf.endIaHour >= base.startIaHour + 8);
+
+  const ffEdge = plan.dependencyEdges.find((edge) => edge.fromId === 'JM-E-1' && edge.toId === 'JM-E-4');
+  const sfEdge = plan.dependencyEdges.find((edge) => edge.fromId === 'JM-E-1' && edge.toId === 'JM-E-5');
+  assert.equal(ffEdge?.relation, 'FF');
+  assert.equal(ffEdge?.lagIaHours, 8);
+  assert.equal(sfEdge?.relation, 'SF');
+  assert.equal(sfEdge?.toAnchor, 'end');
+});
+
+test('updateTaskDependencies persists typed relation tokens in frontmatter', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-deps-edit-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'jm-e-1 - Base.md'), '---\nid: JM-E-1\ntitle: Base\nstatus: To Do\npriority: Medium\ntype: feature\n---\n');
+  fs.writeFileSync(path.join(dir, 'jm-e-2 - Child.md'), '---\nid: JM-E-2\ntitle: Child\nstatus: To Do\npriority: Medium\ntype: feature\ndependencies:\n  - JM-E-1\n---\n');
+
+  const project = { slug: 'demo', name: 'Demo', path: root };
+  const updated = updateTaskDependencies(project, 'JM-E-2', [
+    { id: 'JM-E-1', relation: 'FF', lagValue: 1, lagUnit: 'd' },
+  ]);
+
+  assert.deepEqual(updated.dependencies, ['JM-E-1']);
+  assert.equal(updated.dependencyLinks?.[0]?.relation, 'FF');
+  assert.equal(updated.dependencyLinks?.[0]?.lagIaHours, 8);
+
+  const source = fs.readFileSync(path.join(dir, 'jm-e-2 - Child.md'), 'utf8');
+  assert.match(source, /dependencies:\n\s+- JM-E-1:FF\+1d/);
+});
+
+test('dependencies endpoint persists typed tokens over HTTP', { timeout: 20000 }, async () => {
+  const { tasksDir, catalogPath } = createDependencyHttpSandbox('ariadne-http-deps-ok-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/dependencies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'JM-E-2',
+        dependencies: [
+          { id: 'JM-E-1', relation: 'SS', lagValue: 2, lagUnit: 'h' },
+        ],
+      }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.id, 'JM-E-2');
+    assert.equal(payload.dependencyLinks?.[0]?.relation, 'SS');
+    assert.equal(payload.dependencyLinks?.[0]?.lagIaHours, 2);
+
+    const source = fs.readFileSync(path.join(tasksDir, 'jm-e-2 - Child.md'), 'utf8');
+    assert.match(source, /dependencies:\n\s+- JM-E-1:SS\+2h/);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('dependencies endpoint rejects missing id over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createDependencyHttpSandbox('ariadne-http-deps-missing-id-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/dependencies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dependencies: [{ id: 'JM-E-1', relation: 'FS' }] }),
+    });
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.match(String(payload.error || ''), /id is required/i);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('dependencies endpoint rejects self dependency over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath, tasksDir } = createDependencyHttpSandbox('ariadne-http-deps-self-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/dependencies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'JM-E-2',
+        dependencies: [{ id: 'JM-E-2', relation: 'FS' }],
+      }),
+    });
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.match(String(payload.error || ''), /depender de s[ií]/i);
+
+    const source = fs.readFileSync(path.join(tasksDir, 'jm-e-2 - Child.md'), 'utf8');
+    assert.match(source, /dependencies:\n\s+- JM-E-1/);
+    assert.doesNotMatch(source, /JM-E-2:FS/);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('dependencies endpoint rejects invalid relation and malformed lag over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createDependencyHttpSandbox('ariadne-http-deps-invalid-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const invalidRelation = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/dependencies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'JM-E-2',
+        dependencies: [{ id: 'JM-E-1', relation: 'XS' }],
+      }),
+    });
+    assert.equal(invalidRelation.status, 400);
+    const relationPayload = await invalidRelation.json();
+    assert.match(String(relationPayload.error || ''), /relaci[oó]n inv[aá]lida/i);
+
+    const malformedLag = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/dependencies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'JM-E-2',
+        dependencies: ['JM-E-1:FS+2x'],
+      }),
+    });
+    assert.equal(malformedLag.status, 400);
+    const lagPayload = await malformedLag.json();
+    assert.match(String(lagPayload.error || ''), /dependencia inv[aá]lida/i);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('dependencies endpoint returns 404 for unknown project over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createDependencyHttpSandbox('ariadne-http-deps-missing-project-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/projects/no-existe/tasks/dependencies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'JM-E-2',
+        dependencies: [{ id: 'JM-E-1', relation: 'FS' }],
+      }),
+    });
+    assert.equal(response.status, 404);
+    const payload = await response.json();
+    assert.match(String(payload.error || ''), /project not found/i);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('dependencies endpoint returns 400 for unknown task over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createDependencyHttpSandbox('ariadne-http-deps-missing-task-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/tasks/dependencies`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'JM-E-999',
+        dependencies: [{ id: 'JM-E-1', relation: 'FS' }],
+      }),
+    });
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.match(String(payload.error || ''), /tarea no encontrada/i);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('ai-capacity-config endpoint persists model and operator configuration over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath, projectRoot } = createAiCapacityHttpSandbox('ariadne-http-ai-config-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const payload = {
+      capacity: 4,
+      aiModels: [
+        {
+          key: 'gpt',
+          name: 'GPT-5.3-Codex',
+          initials: 'GPT',
+          maxParallel: 2,
+          requiresOperator: true,
+          operatorId: 'op-1',
+          operatorName: 'AI Operator 1',
+          enabled: true,
+        },
+      ],
+      operators: [
+        { id: 'op-1', name: 'AI Operator 1', active: true, maxParallel: 2, hoursPerDay: 8 },
+      ],
+    };
+
+    const post = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/ai-capacity-config`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(post.status, 200);
+    const postBody = await post.json();
+    assert.equal(postBody.config.capacity, 4);
+    assert.equal(postBody.config.aiModels?.[0]?.key, 'gpt');
+    assert.equal(postBody.config.operators?.[0]?.id, 'op-1');
+
+    const get = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/ai-capacity-config`);
+    assert.equal(get.status, 200);
+    const getBody = await get.json();
+    assert.equal(getBody.config.capacity, 4);
+    assert.equal(getBody.config.aiModels?.[0]?.requiresOperator, true);
+    assert.equal(getBody.config.aiModels?.[0]?.operatorId, 'op-1');
+
+    const configPath = path.join(projectRoot, 'backlog', 'docs', 'ai-capacity.config.json');
+    assert.equal(fs.existsSync(configPath), true);
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('gantt uses effective capacity from saved ai-capacity config when capacity is omitted', { timeout: 20000 }, async () => {
+  const { catalogPath } = createAiCapacityHttpSandbox('ariadne-http-ai-effective-capacity-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+
+  try {
+    const base = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt?includeDone=0&iaHoursPerDay=8&startDate=2026-07-31`);
+    assert.equal(base.status, 200);
+    const baseBody = await base.json();
+    const beforeDays = Number(baseBody?.summary?.estimatedPendingDays || 0);
+
+    const save = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/ai-capacity-config`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        capacity: 6,
+        aiModels: [
+          {
+            key: 'cheap',
+            name: 'Cheap Model',
+            initials: 'CHP',
+            maxParallel: 1,
+            requiresOperator: false,
+            enabled: true,
+          },
+        ],
+        operators: [],
+      }),
+    });
+    assert.equal(save.status, 200);
+
+    const after = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt?includeDone=0&iaHoursPerDay=8&startDate=2026-07-31`);
+    assert.equal(after.status, 200);
+    const afterBody = await after.json();
+    const afterDays = Number(afterBody?.summary?.estimatedPendingDays || 0);
+
+    assert.ok(afterDays > beforeDays);
+    assert.equal(beforeDays, 2);
+    assert.equal(afterDays, 4);
+  } finally {
+    await stopProcess(child);
+  }
 });

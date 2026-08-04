@@ -1,6 +1,33 @@
 const projects = document.querySelector('#projects');
 const empty = document.querySelector('#empty');
 const dialog = document.querySelector('#dialog');
+const DEFAULT_GANTT_BASE_URL = 'http://localhost:63447/';
+let ganttBaseUrl = DEFAULT_GANTT_BASE_URL;
+
+function normalizeBaseUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return DEFAULT_GANTT_BASE_URL;
+  try {
+    const url = new URL(raw);
+    if (!url.pathname || url.pathname === '/') {
+      url.pathname = '/';
+    }
+    return url.toString();
+  } catch {
+    return DEFAULT_GANTT_BASE_URL;
+  }
+}
+
+async function loadHubConfig() {
+  try {
+    const response = await fetch('/api/hub-config', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    ganttBaseUrl = normalizeBaseUrl(data?.ganttBaseUrl);
+  } catch {
+    // Keep default/fallback URL when hub-config is unavailable.
+  }
+}
 
 async function load() {
   const response = await fetch('/api/projects', { cache: 'no-store' });
@@ -9,6 +36,9 @@ async function load() {
   empty.hidden = data.length > 0;
   projects.querySelectorAll('[data-board]').forEach((button) => {
     button.onclick = () => openBoard(button.dataset.board, button.dataset.view);
+  });
+  projects.querySelectorAll('[data-gantt]').forEach((button) => {
+    button.onclick = () => openGantt(button.dataset.gantt);
   });
 }
 
@@ -55,6 +85,9 @@ function card(p) {
         <button data-board="${escapeHtml(p.slug)}" data-view="mejoras" class="lane-action${mejoraActionClass}">Abrir mejoras</button>
       </section>
     </div>
+    <div class="card-actions">
+      <button data-gantt="${escapeHtml(p.slug)}" class="btn-gantt">Abrir Gantt</button>
+    </div>
   </article>`;
 }
 
@@ -67,6 +100,12 @@ async function openBoard(slug, view) {
   const data = await response.json();
   if (data.url) window.open(data.url, '_blank', 'noopener');
   else alert(data.error || 'No se pudo abrir el tablero');
+}
+
+function openGantt(slug) {
+  const url = new URL(ganttBaseUrl);
+  url.searchParams.set('project', String(slug || ''));
+  window.open(url.toString(), 'ariadne-gantt', 'noopener');
 }
 
 function escapeHtml(value) {
@@ -85,4 +124,4 @@ document.querySelector('#project-form').onsubmit = async (event) => {
 };
 window.addEventListener('focus', load);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
-load();
+loadHubConfig().finally(load);

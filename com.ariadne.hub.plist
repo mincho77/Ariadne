@@ -6,11 +6,11 @@
   <string>com.ariadne.hub</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/mauriciootalvaro/.nvm/versions/node/v20.20.2/bin/node</string>
-    <string>/Users/mauriciootalvaro/Code/Ariadne/server.js</string>
+    <string>/Users/TU_USUARIO/.nvm/versions/node/v20.20.2/bin/node</string>
+    <string>/Users/TU_USUARIO/Code/Ariadne/server.js</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/mauriciootalvaro/Code/Ariadne</string>
+  <string>/Users/TU_USUARIO/Code/Ariadne</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

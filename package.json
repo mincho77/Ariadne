@@ -15,8 +15,11 @@
     "bug:create": "node scripts/create-task.js",
     "queue:bugs": "node scripts/bug-queue-runner.js",
     "queue:complete": "node scripts/queue-complete.js",
+    "task:import:improvements": "node scripts/import-improvements.js",
     "task:migrate": "node scripts/migrate-task-ids.js",
-    "task:normalize": "node scripts/migrate-task-ids.js"
+    "task:normalize": "node scripts/migrate-task-ids.js",
+    "release:check:standalone": "node scripts/check-standalone-ready.js",
+    "release:bundle": "npm run release:check:standalone && node scripts/create-standalone-bundle.js"
   },
   "dependencies": {
     "backlog.md": "latest"
