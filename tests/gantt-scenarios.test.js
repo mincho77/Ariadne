@@ -158,6 +158,21 @@ for (const entry of manifest.scenarios) {
         assert.equal(task.durationIaHours === 0, zero, `${id} duration`);
       }
     }
+    if (expect.slackPresent) {
+      assert.ok(plan.slack?.logicalCriticalPath?.route);
+      assert.ok(plan.slack?.resourceCriticalPath?.route);
+      for (const task of plan.tasks) {
+        assert.equal(typeof task.totalSlackIaHours, 'number', `${task.id} slack`);
+      }
+    }
+    if (expect.resourceSerializes) {
+      const naive = buildProjectGanttFromTasks(tasks, { slug: entry.id, name: entry.id }, {
+        ...spec.options,
+        resourceAware: false,
+      });
+      assert.ok(plan.summary.estimatedPendingDays >= naive.summary.estimatedPendingDays);
+      assert.equal(plan.parameters.resourceAware, true);
+    }
   });
 }
 

@@ -69,6 +69,11 @@
       "id": "phases-milestones",
       "dir": "phases-milestones",
       "description": "Parent-child hierarchy and zero-duration milestones"
+    },
+    {
+      "id": "resource-pool-capacity",
+      "dir": "resource-pool-capacity",
+      "description": "Resource pool maxParallel serializes despite global capacity 2"
     }
   ]
 }

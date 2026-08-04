@@ -766,6 +766,50 @@ test('baseline API create, list, read and compare over HTTP', { timeout: 20000 }
   }
 });
 
+test('what-if API simulates without persisting and requires ADOPT token to adopt', { timeout: 20000 }, async () => {
+  const { catalogPath } = createBaselineHttpSandbox('ariadne-http-whatif-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+  const query = 'includeDone=0&iaHoursPerDay=8&startDate=2026-08-04&capacity=1';
+  try {
+    const sim = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/what-if?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label: 'Cap 2', overrides: { capacity: 2 } }),
+    });
+    assert.equal(sim.status, 200);
+    const body = await sim.json();
+    assert.equal(body.persisted, false);
+    assert.ok(body.comparison?.tasks);
+    assert.ok(body.metrics?.current);
+
+    const rejectAdopt = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/what-if?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        confirmAdopt: true,
+        taskPatches: [{ id: 'AH-E-1', estimate_days: 3 }],
+      }),
+    });
+    assert.equal(rejectAdopt.status, 400);
+
+    const adopt = await fetch(`http://127.0.0.1:${port}/api/projects/demo-http/gantt/what-if?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        confirmAdopt: true,
+        confirmToken: 'ADOPT',
+        taskPatches: [{ id: 'AH-E-1', estimate_days: 3 }],
+      }),
+    });
+    assert.equal(adopt.status, 200);
+    const adopted = await adopt.json();
+    assert.equal(adopted.persisted, true);
+    assert.ok(adopted.adopted?.some((row) => row.id === 'AH-E-1'));
+  } finally {
+    await stopProcess(child);
+  }
+});
+
 test('updateTaskChecklist suggests progress without overwriting remaining or progress by default', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-checklist-suggest-'));
   const dir = path.join(root, 'backlog', 'tasks');

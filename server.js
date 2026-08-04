@@ -89,6 +89,8 @@ const {
   buildGanttLaunchUrl,
 } = require('./lib/gantt/ui-contract');
 const { buildHubGanttMetrics } = require('./lib/gantt/hub-metrics');
+const { readResourceConfig } = require('./lib/gantt/resources');
+const { runWhatIfScenario } = require('./lib/gantt/what-if');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -206,9 +208,13 @@ function projectTasks(project) {
 
 function buildProjectGantt(project, options = {}) {
   const aiCapacityConfig = readAiCapacityConfig(project);
+  const fallbackCapacity = options.capacity != null
+    ? Number(options.capacity)
+    : effectiveCapacityFromConfig(aiCapacityConfig, 2);
   return buildGanttPlan(project, {
     ...options,
     aiCapacityConfig,
+    resourceConfig: readResourceConfig(project, fallbackCapacity),
   }, projectTasks);
 }
 
@@ -227,6 +233,7 @@ function ganttOptionsFromRequest(url, project) {
     startDate: url.searchParams.get('startDate') || '',
     holidays: (url.searchParams.get('holidays') || '').split(',').map((item) => item.trim()).filter(Boolean),
     workOnSaturday: url.searchParams.get('workOnSaturday') === '1',
+    resourceAware: url.searchParams.get('resourceAware') === '1',
   };
 }
 
@@ -1416,6 +1423,50 @@ async function handle(req, res) {
     } catch (error) {
       const statusCode = /no encontrada/i.test(error.message) ? 404 : 400;
       return json(res, statusCode, { error: error.message });
+    }
+  }
+  const ganttWhatIf = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt\/what-if$/);
+  if (req.method === 'POST' && ganttWhatIf) {
+    const project = readCatalog().find((item) => item.slug === ganttWhatIf[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (!fs.existsSync(project.path)) return json(res, 404, { error: 'project path missing' });
+    try {
+      const data = await body(req);
+      const ganttOptions = {
+        ...ganttOptionsFromRequest(url, project),
+        ...(data?.ganttOptions || {}),
+      };
+      const tasks = projectTasks(project);
+      const result = runWhatIfScenario(
+        tasks,
+        { slug: project.slug, name: project.name },
+        ganttOptions,
+        data || {},
+      );
+      let adopted = null;
+      if (data?.confirmAdopt) {
+        const token = String(data.confirmToken || data.confirm || '').trim();
+        if (token !== 'ADOPT') {
+          return json(res, 400, { error: 'confirmAdopt requires confirmToken: ADOPT' });
+        }
+        const patches = data.taskPatches || data.tasks || [];
+        adopted = [];
+        for (const patch of patches) {
+          if (!patch?.id) continue;
+          adopted.push(patchProjectTask(project, patch.id, patch));
+        }
+        result.persisted = adopted.length > 0;
+        result.adopted = adopted.map((row) => ({ id: row.id, changes: row.changes }));
+      }
+      const includePlans = data?.includePlans === true;
+      const { currentPlan, scenarioPlan, ...payload } = result;
+      return json(res, 200, {
+        project: project.slug,
+        ...payload,
+        ...(includePlans ? { currentPlan, scenarioPlan } : {}),
+      });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
     }
   }
   const aiCapacity = url.pathname.match(/^\/api\/projects\/([^/]+)\/ai-capacity-config$/);

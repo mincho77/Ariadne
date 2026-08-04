@@ -44,6 +44,7 @@ Required: `fromId`, `toId`, `relation` (FS|SS|FF|SF), `fromAnchor`, `toAnchor`, 
 | `capacity` | 2 or ai-config | 1–12 parallel tasks |
 | `capacityBugs` | from config | Max parallel in bugs lane |
 | `capacityEnhancements` | from config | Max parallel in mejoras lane |
+| `resourceAware` | 0 | 1 enables resource pool scheduling |
 | `includeDone` | 1 | 0 excludes `doneTimeline` |
 | `iaHoursPerDay` | 8 | IA hours per business day |
 | `startDate` | today | YYYY-MM-DD |
@@ -96,3 +97,15 @@ The editable Gantt diagram runs in a separate frontend (`localhost:63447` by def
 ## Hub tracking metrics (AH-E-24)
 
 `GET /api/projects` includes `ganttMetrics` per project; dedicated endpoint `GET /api/projects/{slug}/gantt/metrics`. See `docs/gantt-hub-metrics.md`.
+
+## Resources (AH-E-25)
+
+Optional `resourceAware=1` query param. Task fields `assignee`, `required_skills`, `resource_type`; config `backlog/docs/gantt/resources.config.json`. See `docs/gantt-resources.md`.
+
+## Slack and conditioned critical path (AH-E-26)
+
+Plan includes `slack.logicalCriticalPath`, `slack.resourceCriticalPath`, and per-task slack fields. See `docs/gantt-slack.md`.
+
+## What-if scenarios (AH-E-27)
+
+`POST /api/projects/{slug}/gantt/what-if` simulates overrides and task patches without persisting unless `confirmAdopt` + `confirmToken: ADOPT`. See `docs/gantt-what-if.md`.

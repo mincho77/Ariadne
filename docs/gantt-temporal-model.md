@@ -24,6 +24,7 @@ Campos YAML opcionales en `backlog/tasks/*.md`. El **pronóstico** (`startDate`/
 | `remaining_ia_hours` | entero ≥ 0 | Trabajo restante; prioridad sobre `progress` en el pronóstico |
 | `blocked`, `blocked_reason`, `blocked_by`, `blocked_since`, `expected_unblock_date`, `blocked_until` | bool/text/date | Bloqueo temporal; ver `docs/gantt-blocks.md` |
 | `parent_id`, `release`, `workstream` | id/text | Jerarquía y agrupación; ver `docs/gantt-hierarchy.md` |
+| `assignee`, `required_skills`, `resource_type` | lista/texto | Recursos y pools; ver `docs/gantt-resources.md` |
 | `type: milestone` / `is_milestone` | — | Hito duración cero en el planificador |
 
 Legacy: `started_date`, `due_date`, `estimate_days`, `estimate_ia_hours` siguen válidos.

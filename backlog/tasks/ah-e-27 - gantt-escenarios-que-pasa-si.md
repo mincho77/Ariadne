@@ -1,10 +1,10 @@
 ---
 id: AH-E-27
 title: GANTT · Escenarios qué-pasa-si
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 23:45'
 labels:
   - gantt
   - fase-5
@@ -20,6 +20,7 @@ dependencies:
 epic: 'Gantt integrado'
 references:
   - docs/plans/ariadne-gantt.md
+  - docs/gantt-what-if.md
 ---
 
 ## Description
@@ -30,6 +31,6 @@ Simular capacidad, inicio, festivos, bug urgente, estimaciones sin alterar plan 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Escenarios no persisten sin confirmación
-- [ ] #2 Comparación side-by-side
+- [x] #1 Escenarios no persisten sin confirmación
+- [x] #2 Comparación side-by-side
 <!-- AC:END -->

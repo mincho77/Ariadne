@@ -1,10 +1,10 @@
 ---
 id: AH-E-25
 title: GANTT · Recursos, responsables y capacidad por habilidad
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 23:45'
 labels:
   - gantt
   - fase-5
@@ -20,6 +20,7 @@ dependencies:
 epic: 'Gantt integrado'
 references:
   - docs/plans/ariadne-gantt.md
+  - docs/gantt-resources.md
 ---
 
 ## Description
@@ -30,6 +31,6 @@ Modelo assignee, required_skills, resource_type; disponibilidad y maxParallel po
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Esquema documentado
-- [ ] #2 Motor opcionalmente condicionado por recurso
+- [x] #1 Esquema documentado
+- [x] #2 Motor opcionalmente condicionado por recurso
 <!-- AC:END -->
