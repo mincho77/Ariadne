@@ -1,10 +1,10 @@
 ---
 id: AH-E-10
 title: GANTT · Contrato y escenarios de prueba del planificador
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 17:20'
 labels:
   - gantt
   - fase-0
@@ -28,7 +28,7 @@ Definir contrato JSON estable del planificador y fixtures reproducibles para FS/
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Fixtures versionados bajo tests/fixtures/gantt/
-- [ ] #2 Escenarios documentados en docs/GANTT.md
-- [ ] #3 Pruebas fallan antes de cambios y pasan con motor actual donde aplique
+- [x] #1 Fixtures versionados bajo tests/fixtures/gantt/
+- [x] #2 Escenarios documentados en docs/GANTT.md
+- [x] #3 Pruebas fallan antes de cambios y pasan con motor actual donde aplique
 <!-- AC:END -->

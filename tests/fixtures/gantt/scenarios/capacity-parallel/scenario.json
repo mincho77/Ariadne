@@ -1,0 +1,12 @@
+{
+  "options": {
+    "capacity": 1,
+    "includeDone": false,
+    "startDate": "2026-08-04"
+  },
+  "expect": {
+    "serialDaysMin": 4,
+    "parallelDaysMax": 3,
+    "parallelGroupsMin": 1
+  }
+}

@@ -294,7 +294,7 @@ test('updateTaskDependencies persists typed relation tokens in frontmatter', () 
   assert.equal(updated.dependencyLinks?.[0]?.lagIaHours, 8);
 
   const source = fs.readFileSync(path.join(dir, 'jm-e-2 - Child.md'), 'utf8');
-  assert.match(source, /dependencies:\n\s+- JM-E-1:FF\+1d/);
+  assert.match(source, /dependencies:[\s\S]*JM-E-1:FF\+1d/);
 });
 
 test('dependencies endpoint persists typed tokens over HTTP', { timeout: 20000 }, async () => {
@@ -319,7 +319,7 @@ test('dependencies endpoint persists typed tokens over HTTP', { timeout: 20000 }
     assert.equal(payload.dependencyLinks?.[0]?.lagIaHours, 2);
 
     const source = fs.readFileSync(path.join(tasksDir, 'jm-e-2 - Child.md'), 'utf8');
-    assert.match(source, /dependencies:\n\s+- JM-E-1:SS\+2h/);
+    assert.match(source, /dependencies:[\s\S]*JM-E-1:SS\+2h/);
   } finally {
     await stopProcess(child);
   }

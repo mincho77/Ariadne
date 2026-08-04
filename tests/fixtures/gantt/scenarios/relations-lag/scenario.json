@@ -1,0 +1,15 @@
+{
+  "options": {
+    "capacity": 5,
+    "includeDone": false,
+    "startDate": "2026-08-04",
+    "iaHoursPerDay": 8
+  },
+  "expect": {
+    "pendingTasks": 5,
+    "relations": [
+      "FF",
+      "SF"
+    ]
+  }
+}

@@ -22,6 +22,7 @@
     "release:bundle": "npm run release:check:standalone && node scripts/create-standalone-bundle.js"
   },
   "dependencies": {
-    "backlog.md": "latest"
+    "backlog.md": "latest",
+    "yaml": "^2.7.0"
   }
 }

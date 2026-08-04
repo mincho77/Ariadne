@@ -1,10 +1,10 @@
 ---
 id: AH-E-12
 title: GANTT · Modularizar motor de programación
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 17:20'
 labels:
   - gantt
   - fase-1
@@ -29,7 +29,7 @@ Extraer de server.js módulos: esquema, grafo, calendarios, restricciones, capac
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Módulos en lib/gantt/ o equivalente
-- [ ] #2 server.js delega sin cambiar comportamiento
-- [ ] #3 Regresión npm test verde
+- [x] #1 Módulos en lib/gantt/ o equivalente
+- [x] #2 server.js delega sin cambiar comportamiento
+- [x] #3 Regresión npm test verde
 <!-- AC:END -->

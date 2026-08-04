@@ -4,8 +4,8 @@
 - Estado: en_progreso
 - Última actualización: 2026-08-04
 - Objetivo: evolucionar el Gantt de Ariadne hacia planificación, ejecución, seguimiento y reprogramación integrados con Kanban, Queue y ledgers, manteniendo Markdown como fuente de verdad.
-- Gate actual: AH-E-9 cerrada; siguiente gate AH-E-10 (contrato de pruebas).
-- Próxima acción: iniciar AH-E-10 — fixtures y escenarios del planificador.
+- Gate actual: AH-E-10 … AH-E-12 cerradas; siguiente AH-E-13 (modelo temporal).
+- Próxima acción: iniciar AH-E-13 tras revisar dependencias en Kanban/Gantt.
 
 ## Alcance
 
@@ -44,10 +44,10 @@
 | ID | Fase | Tarea | Estado | Depende de | Aceptación | Evidencia / notas | Próxima acción |
 |---|---|---|---|---|---|---|---|
 | AH-E-9 | 0 Auditoría | Auditar arquitectura y comportamiento Gantt | hecho | - | Diagnóstico existente/parcial/ausente en ledger; tests baseline; UI ubicada | docs/plans/ariadne-gantt.md §Evidencias; npm test 65/65; docs/ARQUITECTURA.md + GANTT.md | Habilitar AH-E-10 |
-| AH-E-10 | 0 Auditoría | Contrato y escenarios de prueba del planificador | pendiente | AH-E-9 | Fixtures FS/SS/FF/SF, lags, ciclos, capacidad, CO festivos | - | Crear tests/fixtures/gantt |
-| AH-E-11 | 1 Fundamentos | Parser YAML confiable ida y vuelta | pendiente | AH-E-9 | Round-trip sin pérdida de Markdown | - | Diseñar módulo parser |
-| AH-E-12 | 1 Fundamentos | Modularizar motor de programación | pendiente | AH-E-9, AH-E-10 | Extracción progresiva con regresión verde | - | Tras AH-E-10 |
-| AH-E-13 | 1 Fundamentos | Modelo temporal y precedencia | pendiente | AH-E-11, AH-E-12 | Campos planned/actual/deadline documentados | - | Tras parser y modularización |
+| AH-E-10 | 0 Auditoría | Contrato y escenarios de prueba del planificador | hecho | AH-E-9 | Fixtures FS/SS/FF/SF, lags, ciclos, capacidad, CO festivos | tests/fixtures/gantt (8 escenarios); docs/gantt-planner-contract.md; npm test 80/80 | Habilitar AH-E-13 |
+| AH-E-11 | 1 Fundamentos | Parser YAML confiable ida y vuelta | hecho | AH-E-9 | Round-trip sin pérdida de Markdown | lib/task-markdown.js; tests/task-markdown.test.js | Habilitar AH-E-13 |
+| AH-E-12 | 1 Fundamentos | Modularizar motor de programación | hecho | AH-E-9, AH-E-10 | Extracción progresiva con regresión verde | lib/gantt/*; server.js delega; npm test 80/80 | Habilitar AH-E-13 |
+| AH-E-13 | 1 Fundamentos | Modelo temporal y precedencia | pendiente | AH-E-11, AH-E-12 | Campos planned/actual/deadline documentados | - | Iniciar modelo temporal |
 | AH-E-14 | 1 Fundamentos | API PATCH actualización parcial | pendiente | AH-E-11 | PATCH atómico con validación | - | Tras parser |
 | AH-E-15 | 2 Kanban | Fechas reales automáticas desde Kanban | pendiente | AH-E-13, AH-E-14 | actual_start/finish en transiciones | - | Tras modelo y PATCH |
 | AH-E-16 | 2 Kanban | Restricciones, deadlines y diagnósticos | pendiente | AH-E-12, AH-E-13 | Explicabilidad por causa | Parcial en buildProjectGantt | Extender motor |
@@ -95,7 +95,7 @@
 ## Historial
 
 - 2026-08-04: Creado ledger, importadas 21 tareas (AH-E-9 … AH-E-29), dependencias en frontmatter, enriquecidas descripciones y AC.
-- 2026-08-04: Auditoría inicial — ver sección Evidencias (AH-E-9).
+- 2026-08-04: AH-E-10 … AH-E-12 cerradas — fixtures Gantt, parser YAML, motor modular en lib/gantt/.
 - 2026-08-04: Añadidos `docs/ARQUITECTURA.md` y `docs/GANTT.md` al repo.
 
 ## Evidencias
@@ -130,3 +130,19 @@
 **UI externa:** default `http://localhost:63447/`; documentación cita build en `repoxai/frontend-angular` — **no presente en workspace** → bloqueo AGANTT-DEF-01.
 
 **Compatibilidad:** backlogs sin `dependencies` tipadas siguen funcionando; tests de regresión cubren motor actual.
+
+### AH-E-10 — Contrato y fixtures (2026-08-04)
+
+- `docs/gantt-planner-contract.md` documenta shape JSON v1.
+- 8 escenarios en `tests/fixtures/gantt/scenarios/` ejecutados por `tests/gantt-scenarios.test.js`.
+
+### AH-E-11 — Parser YAML (2026-08-04)
+
+- `lib/task-markdown.js` con `yaml` npm; round-trip preserva cuerpo y `custom_field`.
+- `parseTask()` en `server.js` usa frontmatter YAML.
+
+### AH-E-12 — Motor modular (2026-08-04)
+
+- `lib/gantt/`: calendar, dependencies, planning-task, critical-path, scheduler.
+- `server.js` delega en `buildGanttPlan(project, options, projectTasks)`.
+- Suite: **80/80** tests OK.

@@ -1,10 +1,10 @@
 ---
 id: AH-E-11
 title: GANTT · Parser YAML confiable con ida y vuelta
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 17:20'
 labels:
   - gantt
   - fase-1
@@ -28,7 +28,7 @@ Reemplazar parseo regex de frontmatter por parser YAML confiable con round-trip 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Leer/modificar/guardar tarea preserva contenido
-- [ ] #2 Compatibilidad con archivos existentes verificada
-- [ ] #3 Pruebas de ida y vuelta incluidas
+- [x] #1 Leer/modificar/guardar tarea preserva contenido
+- [x] #2 Compatibilidad con archivos existentes verificada
+- [x] #3 Pruebas de ida y vuelta incluidas
 <!-- AC:END -->

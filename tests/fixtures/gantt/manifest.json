@@ -1,0 +1,44 @@
+{
+  "scenarios": [
+    {
+      "id": "fs-chain",
+      "dir": "fs-chain",
+      "description": "Linear FS chain schedules in order"
+    },
+    {
+      "id": "capacity-parallel",
+      "dir": "capacity-parallel",
+      "description": "Capacity 2 allows parallel start for independent tasks"
+    },
+    {
+      "id": "relations-lag",
+      "dir": "relations-lag",
+      "description": "FS SS FF SF with positive lag"
+    },
+    {
+      "id": "missing-dependency",
+      "dir": "missing-dependency",
+      "description": "Unknown predecessor increments unresolvedDependencies"
+    },
+    {
+      "id": "cycle-detected",
+      "dir": "cycle-detected",
+      "description": "Mutual dependency marks cycleDetected"
+    },
+    {
+      "id": "bugs-lanes",
+      "dir": "bugs-lanes",
+      "description": "Bug vs enhancement lanes"
+    },
+    {
+      "id": "queue-ordinal",
+      "dir": "queue-ordinal",
+      "description": "Equal priority tasks defer to ordinal in queue"
+    },
+    {
+      "id": "colombia-holiday",
+      "dir": "colombia-holiday",
+      "description": "Start on holiday skips to next working day"
+    }
+  ]
+}
