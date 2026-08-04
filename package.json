@@ -17,6 +17,7 @@
     "smoke:lifecycle": "node --test tests/two-project-lifecycle.test.js",
     "ariadne:audit": "node scripts/ariadne-audit-all.js",
     "ariadne:audit:fix": "node scripts/ariadne-audit-all.js --fix",
+    "ariadne:sync": "node scripts/ariadne-sync.js",
     "ariadne:route-hint": "node scripts/ariadne-route-hint.js",
     "ariadne:launcher": "node scripts/ariadne-launcher.js",
     "task:create": "node scripts/create-task.js",

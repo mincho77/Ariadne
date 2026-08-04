@@ -52,6 +52,7 @@ Integrar el hint en tu launcher de Codex/Cursor **fuera** de este repo cuando el
 
 ```bash
 python3 skills/ariadne/scripts/check_plan.py docs/plans/ariadne-mejoras.md
+npm run ariadne:sync -- --fix
 npm run ariadne:audit
 ```
 

@@ -42,9 +42,9 @@ test('ARIM-004 lite path: launcher + audit fix + check_plan', () => {
   });
   assert.equal(audit.status, 0, audit.stderr || audit.stdout);
 
-  const check = spawnSync('python3', ['skills/ariadne/scripts/check_plan.py', 'docs/plans/ariadne-mejoras.md'], {
+  const sync = spawnSync(process.execPath, ['scripts/ariadne-sync.js', '--json', '--ledger', 'docs/plans/ariadne-mejoras.md'], {
     cwd: ROOT,
     encoding: 'utf8',
   });
-  assert.equal(check.status, 0, check.stdout || check.stderr);
+  assert.equal(sync.status, 0, sync.stderr || sync.stdout);
 });

@@ -47,13 +47,14 @@ ARIADNE_LAUNCHER_VERBOSE=1 eval "$(./scripts/ariadne-launcher.sh 'mueve a cola')
 
 ## Validación (ARIM-004)
 
-Flujo lite real verificado en repo:
+Smoke automatizado (sin medición de tokens):
 
 ```bash
-npm run ariadne:audit:fix
-python3 skills/ariadne/scripts/check_plan.py docs/plans/ariadne-local.md
-npm test -- tests/ariadne-launcher.test.js tests/ariadne-lite.test.js
+npm test -- tests/ariadne-launcher.test.js tests/ariadne-sync.test.js
+npm run ariadne:sync
 ```
+
+Post-edicion de ledgers: ver **`docs/ariadne-automation.md`** (`npm run ariadne:sync -- --fix`).
 
 ## Referencias
 

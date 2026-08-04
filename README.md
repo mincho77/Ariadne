@@ -180,11 +180,14 @@ Cloud agents: `AGENTS.md` y `docs/cloud-dev-environment.md`.
 Auditoría multiproyecto (ledgers + backlog Gantt):
 
 ```bash
+npm run ariadne:sync -- --fix    # post-edit: audit + higiene + check_plan
 npm run ariadne:audit
 npm run ariadne:route-hint -- "mueve tarea a cola"
+npm run ariadne:launcher -- "actualiza el ledger"
+eval "$(./scripts/ariadne-launcher.sh 'mueve a cola')"
 ```
 
-Modo liviano de gobernanza: `docs/ariadne-lite.md` · launcher `docs/ariadne-launcher.md` · skill `skills/ariadne-lite/`.
+Modo liviano y automatización: `docs/ariadne-lite.md` · `docs/ariadne-automation.md` · launcher `docs/ariadne-launcher.md`.
 
 Detener el runner viejo de JurisMate si existía:
 
