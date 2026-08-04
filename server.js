@@ -71,6 +71,11 @@ const {
 } = require('./lib/gantt');
 const { evaluateDependencyGate, assertCanStartWork, normalizeGatePolicy } = require('./lib/dependency-gate');
 const { taskDependencyGateStyles, taskDependencyGateHtml } = require('./board-dependency-gate');
+const {
+  normalizeAiOperators,
+  effectiveCapacityFromConfig,
+  normalizeCapacityConfigField,
+} = require('./lib/gantt/capacity-policy');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -187,7 +192,11 @@ function projectTasks(project) {
 
 
 function buildProjectGantt(project, options = {}) {
-  return buildGanttPlan(project, options, projectTasks);
+  const aiCapacityConfig = readAiCapacityConfig(project);
+  return buildGanttPlan(project, {
+    ...options,
+    aiCapacityConfig,
+  }, projectTasks);
 }
 
 
@@ -251,27 +260,8 @@ function writeAiCapacityConfig(project, config) {
   return config;
 }
 
-function normalizeAiOperators(operators) {
-  if (!Array.isArray(operators)) return [];
-  const seen = new Set();
-  const normalized = [];
-  for (const raw of operators) {
-    const id = String(raw?.id || '').trim() || slugify(String(raw?.name || '').trim());
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    normalized.push({
-      id,
-      name: String(raw?.name || id).trim(),
-      active: raw?.active !== false,
-      maxParallel: Math.max(1, Math.min(6, Number(raw?.maxParallel) || 1)),
-      hoursPerDay: Math.max(1, Math.min(24, Number(raw?.hoursPerDay) || 8)),
-    });
-  }
-  return normalized;
-}
-
 function normalizeAiCapacityConfigPayload(data) {
-  const capacity = Math.max(1, Math.min(12, Number(data?.capacity) || 1));
+  const capacity = normalizeCapacityConfigField(data, 1);
   const operators = normalizeAiOperators(data?.operators);
   const operatorById = new Map(operators.map((operator) => [operator.id, operator]));
   const operatorIdByName = new Map(
@@ -309,29 +299,14 @@ function normalizeAiCapacityConfigPayload(data) {
   return {
     version: Math.max(1, Number(data?.version) || 1),
     capacity,
+    capacityBugs: data?.capacityBugs != null ? Math.max(1, Math.min(12, Number(data.capacityBugs) || 1)) : undefined,
+    capacityEnhancements: data?.capacityEnhancements != null
+      ? Math.max(1, Math.min(12, Number(data.capacityEnhancements) || 1))
+      : undefined,
     aiModels,
     operators,
     updatedAt: new Date().toISOString(),
   };
-}
-
-function effectiveCapacityFromConfig(config, fallbackCapacity) {
-  const fallback = Math.max(1, Math.min(12, Number(fallbackCapacity) || 2));
-  if (!config || typeof config !== 'object') return fallback;
-
-  const humanCapacity = Math.max(1, Math.min(12, Number(config.capacity) || fallback));
-  const models = Array.isArray(config.aiModels) ? config.aiModels : [];
-  const enabledModels = models.filter((model) => model?.enabled !== false);
-  const modelSlots = Math.max(1, enabledModels.reduce((sum, model) => sum + Math.max(1, Math.min(6, Number(model.maxParallel) || 1)), 0));
-
-  const modelsNeedingOperator = enabledModels.filter((model) => Boolean(model.requiresOperator));
-  const operators = normalizeAiOperators(config.operators);
-  const activeOperatorSlots = operators
-    .filter((operator) => operator.active)
-    .reduce((sum, operator) => sum + Math.max(1, Math.min(6, Number(operator.maxParallel) || 1)), 0);
-  const operatorBound = modelsNeedingOperator.length > 0 ? Math.max(1, activeOperatorSlots || 1) : modelSlots;
-
-  return Math.max(1, Math.min(humanCapacity, modelSlots, operatorBound));
 }
 
 function normalizeTextKey(value) {

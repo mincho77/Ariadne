@@ -51,7 +51,7 @@
 | AH-E-14 | 1 Fundamentos | API PATCH actualización parcial | hecho | AH-E-11 | PATCH atómico con validación | PATCH /api/projects/:slug/tasks/:id; npm test 94/94 | Habilitar AH-E-18 |
 | AH-E-15 | 2 Kanban | Fechas reales automáticas desde Kanban | hecho | AH-E-13, AH-E-14 | actual_start/finish en transiciones | updateTaskStatus + applyKanbanTemporalSync; tests | Habilitar AH-E-16 |
 | AH-E-16 | 2 Kanban | Restricciones, deadlines y diagnósticos | hecho | AH-E-12, AH-E-13 | Explicabilidad por causa | lib/gantt/restrictions.js; diagnostics/violations en plan JSON | Habilitar AH-E-18 |
-| AH-E-17 | 2 Kanban | Unificar Queue, prioridad y capacidad | pendiente | AH-E-12, AH-E-13 | Política Doing→Queue→To Do | ai-capacity.config.json existe | Implementar reglas |
+| AH-E-17 | 2 Kanban | Unificar Queue, prioridad y capacidad | hecho | AH-E-12, AH-E-13 | Política Doing→Queue→To Do | lib/gantt/capacity-policy.js; docs/gantt-capacity-policy.md; npm test 108/108 | Habilitar AH-E-19 |
 | AH-E-18 | 2 Kanban | Dependencias aplicables en Kanban | hecho | AH-E-14, AH-E-16 | Bloqueo FS visible en tablero | lib/dependency-gate.js; badges Kanban; API status | Habilitar AH-E-24 |
 | AH-E-19 | 3 Seguimiento | Líneas base del cronograma | pendiente | AH-E-13, AH-E-14 | Baselines inmutables en backlog/docs/gantt/ | - | Diseñar esquema YAML |
 | AH-E-20 | 3 Seguimiento | Progreso y trabajo restante | pendiente | AH-E-13, AH-E-15 | Pronóstico usa remaining | - | Tras fechas reales |

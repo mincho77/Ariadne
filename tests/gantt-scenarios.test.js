@@ -115,6 +115,13 @@ for (const entry of manifest.scenarios) {
         assert.ok(task.startDate >= date, `${id} starts ${task.startDate} before ${date}`);
       }
     }
+    if (expect.parallelAtStart) {
+      const atZero = plan.tasks.filter((task) => task.startIaHour === 0).map((task) => task.id).sort();
+      assert.deepEqual(atZero, [...expect.parallelAtStart].sort());
+    }
+    if (expect.capacityPolicy) {
+      assert.deepEqual(plan.parameters.capacityPolicy, expect.capacityPolicy);
+    }
   });
 }
 

@@ -49,6 +49,16 @@
       "id": "deadline-violation",
       "dir": "deadline-violation",
       "description": "Short deadline marks violation in diagnostics"
+    },
+    {
+      "id": "doing-first",
+      "dir": "doing-first",
+      "description": "In Progress consumes capacity; Queue before To Do"
+    },
+    {
+      "id": "lane-capacity",
+      "dir": "lane-capacity",
+      "description": "Split bugs/enhancements lane capacity"
     }
   ]
 }
