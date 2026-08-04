@@ -77,6 +77,12 @@ Consultar cola:
 curl -s 'http://127.0.0.1:6421/api/queue/bugs?project=jurismate'
 ```
 
+Marcar bug terminado (libera el runner para el siguiente):
+
+```bash
+npm run queue:complete -- jurismate JM-B-23
+```
+
 Crear tarea genérica vía API:
 
 ```bash

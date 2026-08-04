@@ -14,6 +14,7 @@
     "task:create": "node scripts/create-task.js",
     "bug:create": "node scripts/create-task.js",
     "queue:bugs": "node scripts/bug-queue-runner.js",
+    "queue:complete": "node scripts/queue-complete.js",
     "task:migrate": "node scripts/migrate-task-ids.js",
     "task:normalize": "node scripts/migrate-task-ids.js"
   },
