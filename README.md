@@ -177,6 +177,15 @@ npm run smoke:cloud       # smoke entorno cloud / agente
 
 Cloud agents: `AGENTS.md` y `docs/cloud-dev-environment.md`.
 
+Auditoría multiproyecto (ledgers + backlog Gantt):
+
+```bash
+npm run ariadne:audit
+npm run ariadne:route-hint -- "mueve tarea a cola"
+```
+
+Modo liviano de gobernanza: `docs/ariadne-lite.md` · skill `skills/ariadne-lite/`.
+
 Detener el runner viejo de JurisMate si existía:
 
 ```bash

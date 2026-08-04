@@ -1,11 +1,11 @@
 # Plan: Mejoras internas de Ariadne
 
 ## Control
-- Estado: pendiente
-- Última actualización: 2026-07-28
+- Estado: en_progreso
+- Última actualización: 2026-08-05
 - Objetivo: mantener una cola separada de mejoras para Ariadne, incluyendo ahorro de tokens, variantes livianas y automatizacion operativa sin mezclarlo con bugs productivos de JurisMate.
-- Gate actual: proyecto creado para seguimiento futuro.
-- Próxima acción: evaluar si conviene crear `ariadne-lite` y un wrapper de ejecucion que seleccione modelo barato cuando el pedido sea solo registrar, mover o actualizar tareas.
+- Gate actual: AH-E-5 cerrada; skill `ariadne-lite` disponible.
+- Próxima acción: integrar `ariadne-route-hint` en launcher externo si el cliente permite elegir modelo.
 
 ## Alcance
 
@@ -40,9 +40,9 @@
 
 | ID | Fase | Tarea | Estado | Depende de | Aceptacion | Evidencia / notas | Proxima accion |
 |---|---|---|---|---|---|---|---|
-| ARIM-001 | Producto | Definir modo barato para tareas simples de Ariadne | pendiente | - | Queda definida la regla exacta de cuando usar modelo barato y cuando no | Pedido del usuario: Ariadne es principalmente leer/escribir/actualizar y debe poder costar menos tokens | Disenar `ariadne-lite` o wrapper |
-| ARIM-002 | Implementacion | Crear variante `ariadne-lite` o ajuste equivalente | pendiente | ARIM-001 | El flujo limita lecturas a ledger principal y JM relevante; no audita codigo ni despliega | - | Comparar editar skill actual vs crear skill nuevo |
-| ARIM-003 | Automatizacion | Evaluar wrapper de seleccion de modelo | pendiente | ARIM-001 | El wrapper detecta `/ariadne`, `$ariadne`, `agrega a ariadne` y usa modelo barato; mantiene modelo fuerte para Pharos/despliegue | - | Implementar solo si el entorno de ejecucion permite escoger modelo |
+| ARIM-001 | Producto | Definir modo barato para tareas simples de Ariadne | hecho | - | Reglas en docs/ariadne-lite.md | AH-E-5; tabla lite vs full | Mantener |
+| ARIM-002 | Implementacion | Crear variante `ariadne-lite` o ajuste equivalente | hecho | ARIM-001 | skills/ariadne-lite/SKILL.md | npm test ariadne-lite | — |
+| ARIM-003 | Automatizacion | Evaluar wrapper de seleccion de modelo | diferido | ARIM-001 | Hint CLI listo; modelo lo elige Cursor/Codex | scripts/ariadne-route-hint.js | Integrar en launcher |
 | ARIM-004 | Validacion | Medir ahorro y seguridad del flujo | pendiente | ARIM-002, ARIM-003 | Una prueba real actualiza una tarea Ariadne con menos contexto y `check_plan.py` pasa | - | Ejecutar una actualizacion no critica |
 
 ## Riesgos
@@ -63,8 +63,8 @@
 
 | ID | Trabajo | Motivo | Condicion de reactivacion |
 |---|---|---|---|
-| ARIM-DEF-001 | Implementar wrapper real de modelo | Requiere confirmar desde donde se invoca Codex y que modelos estan disponibles | El usuario decida automatizar el flujo de ejecucion |
+| ARIM-DEF-001 | Implementar wrapper real de modelo | Requiere confirmar desde donde se invoca Codex y que modelos estan disponibles | Hint `npm run ariadne:route-hint` entregado; falta cableado en cliente |
 
 ## Historial
 
-- 2026-07-28: Se crea proyecto interno de mejoras de Ariadne para registrar el requerimiento de usar un modelo mas barato en tareas simples de lectura/escritura y dejarlo pendiente para evaluar luego.
+- 2026-08-05: AH-E-5 — skill `ariadne-lite`, docs/ariadne-lite.md, route-hint CLI; ARIM-001/002 hecho.
