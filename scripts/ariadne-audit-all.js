@@ -8,12 +8,15 @@ const { spawnSync } = require('node:child_process');
 const ROOT = path.join(__dirname, '..');
 const CHECK_PLAN = path.join(ROOT, 'skills', 'ariadne', 'scripts', 'check_plan.py');
 const GANTT_AUDIT = path.join(ROOT, 'scripts', 'gantt-backlog-audit.js');
+const { auditLedgerFile, fixLedgerFile } = require('../lib/ledger-hygiene');
 
 function usage() {
   console.error(`Usage:
-  node scripts/ariadne-audit-all.js [--json]
+  node scripts/ariadne-audit-all.js [--json] [--fix]
 
 Runs check_plan.py on every docs/plans/*.md ledger.
+Detects stale "Próxima acción" cells pointing at hecho/cancelado IDs.
+With --fix, rewrites those cells to "—" (dry-run otherwise reports only).
 If projects.json exists, also runs gantt-backlog-audit.js --all --json.
 Exit code 1 when any ledger errors or gantt issues exist.
 `);
@@ -97,20 +100,40 @@ function summarizeProjects() {
 const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) usage();
 const jsonOut = args.includes('--json');
+const applyFix = args.includes('--fix');
 
-const ledgers = listLedgers().map(runCheckPlan);
+const ledgerPaths = listLedgers();
+const hygiene = ledgerPaths.map((ledgerPath) => auditLedgerFile(ledgerPath));
+if (applyFix) {
+  for (const ledgerPath of ledgerPaths) {
+    fixLedgerFile(ledgerPath, { dryRun: false });
+  }
+}
+const ledgers = ledgerPaths.map(runCheckPlan);
 const gantt = runGanttAudit();
 const projects = summarizeProjects();
 
 const ledgerErrors = ledgers.reduce((sum, row) => sum + row.errors, 0);
 const ledgerFailed = ledgers.filter((row) => !row.ok).length;
+const hygieneIssues = hygiene.reduce((sum, row) => sum + row.issues.length, 0);
 const ganttIssues = gantt.skipped ? 0 : (gantt.totalIssues || 0);
-const totalProblems = ledgerErrors + ganttIssues;
+const totalProblems = ledgerErrors + ganttIssues + (applyFix ? 0 : hygieneIssues);
 
 const report = {
   auditedAt: new Date().toISOString(),
   ledgers,
   ledgerSummary: { count: ledgers.length, failed: ledgerFailed, errors: ledgerErrors },
+  hygiene: hygiene.map((row) => ({
+    ledger: path.relative(ROOT, row.ledger),
+    issues: row.issues.map((issue) => ({
+      taskId: issue.taskId,
+      refId: issue.refId,
+      refState: issue.refState,
+      suggested: issue.suggested,
+    })),
+    ok: row.ok,
+  })),
+  hygieneSummary: { issues: hygieneIssues, fixed: applyFix ? hygieneIssues : 0 },
   projects,
   gantt,
   ok: totalProblems === 0 && ledgerFailed === 0,
@@ -123,6 +146,16 @@ if (jsonOut) {
   for (const row of ledgers) {
     const mark = row.ok ? 'OK' : 'FAIL';
     console.log(`  [${mark}] ${row.ledger} (${row.errors} errors, ${row.warnings} warnings)`);
+  }
+  const stale = report.hygiene.filter((row) => row.issues.length);
+  if (stale.length) {
+    console.log(`\nLedger hygiene (${applyFix ? 'fixed' : 'stale next-action refs'}):`);
+    for (const row of stale) {
+      for (const issue of row.issues) {
+        const action = applyFix ? 'fixed' : 'stale';
+        console.log(`  [${action.toUpperCase()}] ${row.ledger} ${issue.taskId}: "${issue.refId}" (${issue.refState}) → ${issue.suggested}`);
+      }
+    }
   }
   if (projects.length) {
     console.log(`\nProjects (${projects.length}):`);

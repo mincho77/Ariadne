@@ -51,7 +51,7 @@
 | ARLOCAL-006 | 3 Hub | Abrir o iniciar tablero Backlog por proyecto | hecho | ARLOCAL-005 | Cada proyecto tiene URL local estable y proceso controlado | API devolvió `http://127.0.0.1:6422`; tablero respondió HTTP 200 | Mejorar cierre explícito de procesos |
 | ARLOCAL-007 | 4 Ariadne | Adaptar skill a Backlog MCP y CLI | hecho | ARLOCAL-003 | Ariadne usa operaciones Backlog cuando existen y cae a Markdown solo cuando corresponde | `~/.codex/skills/ariadne/SKILL.md` actualizado | Usar contrato en próximos planes |
 | ARLOCAL-008 | 4 Ariadne | Añadir checkpoints, hallazgos, errores y recuperación | hecho | ARLOCAL-007 | Cada fase guarda estado, siguiente acción, evidencia y errores relevantes | Skill actualizado con checkpoint/recover y reglas de evidencia | Implementar comandos dedicados si hacen falta |
-| ARLOCAL-009 | 4 Ariadne | Añadir auditoría multiproyecto | hecho | ARLOCAL-005, ARLOCAL-007 | `npm run ariadne:audit` revisa ledgers y backlog Gantt | scripts/ariadne-audit-all.js | ARLOCAL-010 |
+| ARLOCAL-009 | 4 Ariadne | Añadir auditoría multiproyecto | hecho | ARLOCAL-005, ARLOCAL-007 | `npm run ariadne:audit` revisa ledgers y backlog Gantt | scripts/ariadne-audit-all.js | — |
 | ARLOCAL-010 | 5 Validación | Probar ciclo completo con dos proyectos | hecho | ARLOCAL-006, ARLOCAL-009 | Crear, avanzar, bloquear, reanudar y cerrar tareas sin perder datos | tests/two-project-lifecycle.test.js; npm test 166/166 | Integrar route-hint |
 | ARLOCAL-011 | 5 Entrega | Documentar comando de inicio y backup | hecho | ARLOCAL-003 | Usuario puede iniciar Hub y entender ubicación de datos | `tools/ariadne-hub/README.md`; bind local documentado | Añadir backup cuando exista catálogo real |
 | ARLOCAL-012 | 5 Operación | Priorizar tareas y distinguir bugs en el tablero | hecho | ARLOCAL-006 | Las prioridades se configuran como Ultra High → High → Medium → Low; tarjetas ordenadas y tipadas | Backlog `JM-18` (Done); `backlog.config.yml`; `tools/ariadne-hub/server.js`; `npm test` 3/3 | Atender JM-17 |
@@ -128,6 +128,7 @@
 
 ## Historial
 
+- 2026-08-04: `npm run ariadne:audit:fix` corrige referencias obsoletas en columna Próxima acción (p. ej. ARLOCAL-009 → ARLOCAL-010 ya hecho); lib/ledger-hygiene.js integrado en audit-all.
 - 2026-08-04: ARLOCAL-010 cerrado con prueba HTTP multiproyecto (`tests/two-project-lifecycle.test.js`): crear, cola, In Progress, edición Markdown, bloqueo por subestado, reanudación y cierre en `proj-alpha` y `proj-beta` sin pérdida en disco; portafolio Gantt con dos proyectos; `npm test` 166/166.
 
 - 2026-07-26: Se revisaron skills/repositorios de GitHub y herramientas locales.

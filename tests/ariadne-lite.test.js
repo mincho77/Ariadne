@@ -19,7 +19,8 @@ test('classifyMessage routes Gantt work to full', () => {
   assert.equal(row.mode, 'full');
 });
 
-test('classifyMessage defaults unknown text to full for safety', () => {
-  const row = classifyMessage('haz algo raro con el repo');
-  assert.equal(row.mode, 'full');
+test('classifyMessage routes ledger audit fix to lite', () => {
+  const row = classifyMessage('Ariadne audita corrige');
+  assert.equal(row.mode, 'lite');
+  assert.equal(row.skill, 'ariadne-lite');
 });
