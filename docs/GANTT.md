@@ -49,7 +49,9 @@ Concretamente:
 Configuración de la URL de la UI:
 
 - Variable de entorno: `ARIADNE_GANTT_BASE_URL` (default `http://localhost:63447/`)
-- O consulta: `GET /api/hub-config` → `{ "ganttBaseUrl": "..." }`
+- O consulta: `GET /api/hub-config` → `{ "ganttBaseUrl": "...", "ganttUi": { ... } }`
+- Contrato completo UI↔Hub: `docs/gantt-ui-integration.md` (repo frontend: [frontend-angular](https://github.com/repoxai/frontend-angular))
+- Smoke backend: `npm run gantt:smoke`
 
 ---
 

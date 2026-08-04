@@ -88,3 +88,7 @@ Blocked tasks expose `forecastConfidence` and block metadata on `tasks[]`. See `
 ## Hierarchy and milestones (AH-E-22)
 
 `milestones[]` and `hierarchy` document parent-child structure. See `docs/gantt-hierarchy.md`.
+
+## External UI integration (AH-E-23)
+
+The editable Gantt diagram runs in a separate frontend (`localhost:63447` by default). Hub discovery: `GET /api/hub-config` (`ganttUi`, `ganttLaunchExample`) and `GET /api/gantt-ui-contract`. See `docs/gantt-ui-integration.md`. Smoke: `npm run gantt:smoke`.

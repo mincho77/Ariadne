@@ -84,6 +84,10 @@ const {
   compareBaselineToPlan,
 } = require('./lib/gantt/baselines');
 const { suggestProgressFromChecklist } = require('./lib/gantt/progress');
+const {
+  buildHubGanttUiConfig,
+  buildGanttLaunchUrl,
+} = require('./lib/gantt/ui-contract');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -1283,11 +1287,30 @@ async function handle(req, res) {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   if (req.method === 'GET' && url.pathname === '/api/projects') return json(res, 200, readCatalog().map(summarize));
   if (req.method === 'GET' && url.pathname === '/api/hub-config') {
+    const hubApiBase = `http://${HOST}:${PORT}`;
+    const sampleSlug = readCatalog()[0]?.slug || 'ariadne';
     return json(res, 200, {
       ganttBaseUrl: GANTT_BASE_URL,
       hubPort: PORT,
       boardPort: BOARD_PORT,
+      hubApiBase,
+      ganttLaunchExample: buildGanttLaunchUrl(GANTT_BASE_URL, sampleSlug),
+      ganttUi: buildHubGanttUiConfig({
+        hubApiBase,
+        ganttBaseUrl: GANTT_BASE_URL,
+        hubPort: PORT,
+        boardPort: BOARD_PORT,
+      }),
     });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/gantt-ui-contract') {
+    const hubApiBase = `http://${HOST}:${PORT}`;
+    return json(res, 200, buildHubGanttUiConfig({
+      hubApiBase,
+      ganttBaseUrl: GANTT_BASE_URL,
+      hubPort: PORT,
+      boardPort: BOARD_PORT,
+    }));
   }
   const gantt = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt$/);
   if (req.method === 'GET' && gantt) {

@@ -57,7 +57,7 @@
 | AH-E-20 | 3 Seguimiento | Progreso y trabajo restante | hecho | AH-E-13, AH-E-15 | Pronóstico usa remaining | lib/gantt/progress.js; docs/gantt-progress.md; npm test | Habilitar AH-E-21 |
 | AH-E-21 | 3 Seguimiento | Bloqueos temporales modelados | hecho | AH-E-13, AH-E-16 | blocked_* y confianza baja | lib/gantt/blocks.js; docs/gantt-blocks.md; escenario temporal-block | Habilitar AH-E-24 |
 | AH-E-22 | 3 Seguimiento | Fases, entregables e hitos | hecho | AH-E-11, AH-E-13 | parent_id, hitos duración 0 | lib/gantt/hierarchy.js; docs/gantt-hierarchy.md; escenario phases-milestones | Habilitar AH-E-23 |
-| AH-E-23 | 4 Gantt UI | UI editable (coordinación externa) | pendiente | AH-E-14, AH-E-16, AH-E-19, AH-E-20, AH-E-22 | Contrato API + smoke Hub→63447 | UI fuera del repo; ver Evidencias | Confirmar repo frontend |
+| AH-E-23 | 4 Gantt UI | UI editable (coordinación externa) | hecho | AH-E-14, AH-E-16, AH-E-19, AH-E-20, AH-E-22 | Contrato API + smoke Hub→63447 | docs/gantt-ui-integration.md; lib/gantt/ui-contract.js; npm run gantt:smoke | Habilitar AH-E-24 |
 | AH-E-24 | 4 Hub | Métricas de seguimiento en Hub | pendiente | AH-E-15, AH-E-16, AH-E-19, AH-E-20, AH-E-21 | Tarjeta proyecto con fin plan/pronóstico | - | Tras métricas backend |
 | AH-E-25 | 5 Avanzado | Recursos y capacidad por habilidad | pendiente | AH-E-11, AH-E-12, AH-E-13 | assignee, skills, resource_type | Diferido post-MVP | Tras MVP |
 | AH-E-26 | 5 Avanzado | Holgura y CP condicionada | pendiente | AH-E-16, AH-E-25 | Slack y CP lógica vs recursos | - | Post-MVP |
@@ -89,7 +89,7 @@
 
 | ID | Trabajo | Motivo | Condición de reactivación |
 |---|---|---|---|
-| AGANTT-DEF-01 | Edición visual completa en :63447 | Repo frontend no clonado en workspace | Usuario confirma ruta y acceso al repo |
+| AGANTT-DEF-01 | Edición visual completa en :63447 | Repo frontend no clonado en workspace | Contrato API + smoke en AH-E-23; clonar frontend-angular localmente | mitigado (backend) |
 | AGANTT-DEF-02 | Portafolio multiproyecto | Prioridad Low; no bloquea MVP | MVP cerrado |
 
 ## Historial
@@ -111,6 +111,8 @@
 - 2026-08-04: AH-E-21 cerrada — bloqueos temporales, confianza baja sin fecha de desbloqueo.
 
 - 2026-08-04: AH-E-22 cerrada — jerarquía parent_id, hitos duración cero en API Gantt.
+
+- 2026-08-04: AH-E-23 cerrada — contrato UI externo, hub-config ampliado, smoke Hub→backend (AGANTT-DEF-01 documentado).
 
 ## Evidencias
 

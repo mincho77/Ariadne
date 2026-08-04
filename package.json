@@ -11,6 +11,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
+    "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
     "task:create": "node scripts/create-task.js",
     "bug:create": "node scripts/create-task.js",
     "queue:bugs": "node scripts/bug-queue-runner.js",

@@ -1,10 +1,10 @@
 ---
 id: AH-E-23
 title: GANTT · UI editable del Gantt (coordinación)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 22:00'
 labels:
   - gantt
   - fase-4
@@ -32,7 +32,7 @@ Coordinar UI editable en repo externo (:63447); contrato API; tabla+timeline; de
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Bloqueo UI documentado si repo no disponible
-- [ ] #2 Tareas coordinadora con URL del frontend
-- [ ] #3 Smoke de integración Hub→UI
+- [x] #1 Bloqueo UI documentado si repo no disponible
+- [x] #2 Tareas coordinadora con URL del frontend
+- [x] #3 Smoke de integración Hub→UI
 <!-- AC:END -->
