@@ -20,6 +20,8 @@ const FULL_PATTERNS = [
 ];
 
 const LITE_PATTERNS = [
+  /\b(audita|audit)\s*(y\s*)?(corrige|fix|arregla)\b/i,
+  /\b(npm run )?ariadne:audit(:fix)?\b/i,
   /\b(cola|queue|ordinal|turno)\b/i,
   /\b(mover|mueve|move)\s+(a\s+)?(queue|cola|doing|done|to do)\b/i,
   /\b(crear|create|nueva)\s+tarea\b/i,

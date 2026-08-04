@@ -15,6 +15,7 @@ test('ariadne-audit-all passes on repository ledgers', () => {
   assert.ok(report.ledgerSummary.count >= 1);
   assert.equal(report.ok, true);
   assert.ok(report.ledgers.every((row) => row.ok));
+  assert.ok(Array.isArray(report.hygiene));
 });
 
 test('ariadne-route-hint CLI emits JSON', () => {
