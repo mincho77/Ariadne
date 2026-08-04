@@ -37,6 +37,10 @@ const {
   boardTaskDetailStyles,
   boardTaskDetailInitScript,
 } = require('./board-task-detail');
+const { evaluateDependencyGate, normalizeGatePolicy } = require('./lib/dependency-gate');
+const { taskDependencyGateStyles, taskDependencyGateHtml } = require('./board-dependency-gate');
+
+const DEPENDENCY_GATE_POLICY = normalizeGatePolicy(process.env.ARIADNE_DEPENDENCY_GATE_POLICY);
 
 function isImprovementTask(task) {
   return !isBugTask(task);
@@ -169,11 +173,16 @@ function mejorasBoardPage(project, helpers) {
       const searchable = `${task.id} ${task.title} ${task.priority} ${area} ${task.type} ${task.effectiveSubstatus || ''} ${task.nextAction || ''}`.toLowerCase();
       const queuePosition = queue ? queuePositionHtml(position) : '';
       const dragHint = queue ? 'Drag to reorder queue' : 'Drag to change status';
+      const depGate = taskDependencyGateHtml(
+        evaluateDependencyGate(task, items, { policy: DEPENDENCY_GATE_POLICY }),
+        escapeHtml,
+      );
       return `<div role="button" tabindex="0" draggable="true" class="${queueTaskClassName('task', queue, position)}" data-task="${index}" data-task-id="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status)}" data-search="${escapeHtml(searchable)}">
         ${queuePosition}
         <span class="task-heading"><strong class="task-id">${escapeHtml(task.id)}</strong><strong class="task-title">${escapeHtml(task.title)}</strong></span>
         <span class="task-meta"><span class="area-badge">${escapeHtml(area)}</span><span class="type-badge">${escapeHtml(task.type || 'task')}</span><span class="priority priority-${priorityRank(task.priority)}">${escapeHtml(task.priority)}</span></span>
         ${taskCardSubstatusHtml(task, escapeHtml)}
+        ${depGate}
         ${boardDragHintHtml(dragHint)}
       </div>`;
     }).join('') || `<p class="empty">${queue ? 'Drag here to authorize the next improvement.' : 'Sin mejoras en esta columna'}</p>`;
@@ -183,14 +192,20 @@ function mejorasBoardPage(project, helpers) {
       <div class="task-list">${content}</div>
     </section>`;
   }).join('');
-  const taskData = JSON.stringify(items.map(({ id, title, status, priority, type, file, source, labels, substatus, nextAction, effectiveSubstatus }) => ({
-    id, title, status, priority, type, file,
-    area: inferImprovementArea({ id, title, status, priority, type, file, labels }),
-    detailHtml: taskDetailHtml(source),
-    source,
-    substatus,
-    nextAction,
-    effectiveSubstatus,
+  const taskData = JSON.stringify(items.map((task) => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    type: task.type,
+    file: task.file,
+    area: inferImprovementArea(task),
+    detailHtml: taskDetailHtml(task.source),
+    source: task.source,
+    substatus: task.substatus,
+    nextAction: task.nextAction,
+    effectiveSubstatus: task.effectiveSubstatus,
+    dependencyGate: evaluateDependencyGate(task, items, { policy: DEPENDENCY_GATE_POLICY }),
   }))).replace(/</g, '\\u003c');
   const statsHtml = renderImprovementStatsHtml(stats, escapeHtml);
 
@@ -211,6 +226,7 @@ ${boardCreateStyles('mejoras')}
 ${boardDeleteStyles('mejoras')}
 ${boardSubstatusStyles()}
 ${boardTaskDetailStyles('mejoras')}
+${taskDependencyGateStyles()}
 ${boardCardInteractionStyles('mejoras')}
 ${statsPanelStyles('mejoras')}
 .kpi{background:#0f2433;border:1px solid #2f6b8f;border-radius:14px;padding:16px}.kpi span{display:block;color:#9db3c7;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.kpi strong{font-size:28px}.kpi.warn strong{color:#ffd59a}.kpi.good strong{color:#8de1b8}

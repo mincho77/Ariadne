@@ -36,6 +36,10 @@ const {
   boardTaskDetailStyles,
   boardTaskDetailInitScript,
 } = require('./board-task-detail');
+const { evaluateDependencyGate, normalizeGatePolicy } = require('./lib/dependency-gate');
+const { taskDependencyGateStyles, taskDependencyGateHtml } = require('./board-dependency-gate');
+
+const DEPENDENCY_GATE_POLICY = normalizeGatePolicy(process.env.ARIADNE_DEPENDENCY_GATE_POLICY);
 
 const BUG_THEME_RULES = [
   ['Justo / IA', /justo|pretension|rag|ocr|presupuesto|cuant/i],
@@ -195,11 +199,16 @@ function bugsBoardPage(project, helpers) {
       const searchable = `${task.id} ${task.title} ${task.priority} ${theme} ${task.effectiveSubstatus || ''} ${task.nextAction || ''} ${task.file}`.toLowerCase();
       const queuePosition = queue ? queuePositionHtml(position) : '';
       const dragHint = queue ? 'Drag to reorder queue' : 'Drag to change status';
+      const depGate = taskDependencyGateHtml(
+        evaluateDependencyGate(task, bugs, { policy: DEPENDENCY_GATE_POLICY }),
+        escapeHtml,
+      );
       return `<div role="button" tabindex="0" draggable="true" class="${queueTaskClassName('task type-bug-card', queue, position)}" data-task="${index}" data-task-id="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status)}" data-search="${escapeHtml(searchable)}">
         ${queuePosition}
         <span class="task-heading"><strong class="task-id">${escapeHtml(task.id)}</strong><strong class="task-title">${escapeHtml(task.title)}</strong></span>
         <span class="task-meta"><span class="theme-badge">${escapeHtml(theme)}</span><span class="priority priority-${priorityRank(task.priority)}">${escapeHtml(task.priority)}</span></span>
         ${taskCardSubstatusHtml(task, escapeHtml)}
+        ${depGate}
         ${boardDragHintHtml(dragHint)}
       </div>`;
     }).join('') || `<p class="empty">${queue ? 'Drag here to authorize the next bug.' : 'Sin bugs en esta columna'}</p>`;
@@ -209,14 +218,20 @@ function bugsBoardPage(project, helpers) {
       <div class="task-list">${content}</div>
     </section>`;
   }).join('');
-  const taskData = JSON.stringify(bugs.map(({ id, title, status, priority, type, file, source, labels, substatus, nextAction, effectiveSubstatus }) => ({
-    id, title, status, priority, type, file,
-    theme: inferBugTheme({ id, title, status, priority, type, file, labels }),
-    detailHtml: taskDetailHtml(source),
-    source,
-    substatus,
-    nextAction,
-    effectiveSubstatus,
+  const taskData = JSON.stringify(bugs.map((task) => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    type: task.type,
+    file: task.file,
+    theme: inferBugTheme(task),
+    detailHtml: taskDetailHtml(task.source),
+    source: task.source,
+    substatus: task.substatus,
+    nextAction: task.nextAction,
+    effectiveSubstatus: task.effectiveSubstatus,
+    dependencyGate: evaluateDependencyGate(task, bugs, { policy: DEPENDENCY_GATE_POLICY }),
   }))).replace(/</g, '\\u003c');
   const statsHtml = renderBugStatsHtml(stats, escapeHtml);
 
@@ -237,6 +252,7 @@ ${boardCreateStyles('bugs')}
 ${boardDeleteStyles('bugs')}
 ${boardSubstatusStyles()}
 ${boardTaskDetailStyles('bugs')}
+${taskDependencyGateStyles()}
 ${boardCardInteractionStyles('bugs')}
 ${statsPanelStyles('bugs')}
 .kpi{background:#24161a;border:1px solid #5a3540;border-radius:14px;padding:16px}.kpi span{display:block;color:#c4a9b0;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.kpi strong{font-size:28px}.kpi.warn strong{color:#ffb4b4}.kpi.good strong{color:#8de1b8}

@@ -1,4 +1,4 @@
-const test = require('node:test'); const assert = require('node:assert/strict'); const { once } = require('node:events'); const { spawn } = require('node:child_process'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, updateTaskDependencies, projectTasks, buildProjectGantt, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, computeSourceHash } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+const test = require('node:test'); const assert = require('node:assert/strict'); const { once } = require('node:events'); const { spawn } = require('node:child_process'); const { slugify, parseTask, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextImprovement, pickNextBug, summarize, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, updateTaskSource, updateTaskDependencies, projectTasks, buildProjectGantt, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate } = require('./server'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
 
 async function reservePort() {
   const net = require('node:net');
@@ -662,4 +662,38 @@ test('PATCH task endpoint returns 409 on stale hash', { timeout: 20000 }, async 
   } finally {
     await stopProcess(child);
   }
+});
+
+test('updateTaskStatus blocks In Progress when FS predecessor is open', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-dep-gate-status-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'gt-e-1 - Base.md'), '---\nid: GT-E-1\ntitle: Base\nstatus: To Do\npriority: Medium\ntype: feature\n---\n');
+  fs.writeFileSync(path.join(dir, 'gt-e-2 - Child.md'), '---\nid: GT-E-2\ntitle: Child\nstatus: To Do\npriority: Medium\ntype: feature\ndependencies:\n  - GT-E-1:FS\n---\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+
+  await assert.rejects(
+    async () => updateTaskStatus(project, 'GT-E-2', 'In Progress'),
+    /Dependencia FS pendiente/i,
+  );
+
+  applyTaskStateFallback(project, 'GT-E-1', 'Done', false);
+  const gate = evaluateDependencyGate(
+    projectTasks(project).find((task) => task.id === 'GT-E-2'),
+    projectTasks(project),
+    { policy: 'strict' },
+  );
+  assert.equal(gate.blocked, false);
+});
+
+test('evaluateDependencyGate is exposed from server helpers', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-dep-gate-helper-'));
+  const dir = path.join(root, 'backlog', 'tasks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'gt-e-1 - Base.md'), '---\nid: GT-E-1\ntitle: Base\nstatus: To Do\npriority: Medium\ntype: feature\n---\n');
+  fs.writeFileSync(path.join(dir, 'gt-e-2 - Child.md'), '---\nid: GT-E-2\ntitle: Child\nstatus: To Do\npriority: Medium\ntype: feature\ndependencies:\n  - GT-E-1\n---\n');
+  const project = { slug: 'demo', name: 'Demo', path: root };
+  const tasks = projectTasks(project);
+  const gate = evaluateDependencyGate(tasks[1], tasks, { policy: 'strict' });
+  assert.equal(gate.blocked, true);
 });

@@ -1,10 +1,10 @@
 ---
 id: AH-E-16
 title: GANTT · Restricciones, deadlines y diagnósticos
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-04 18:45'
 labels:
   - gantt
   - fase-2
@@ -29,7 +29,7 @@ Motor considera not_before, fixed dates, deadline, target_finish; diagnósticos 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Incumplimientos detectados y reportados
-- [ ] #2 Explicabilidad por dependencia/capacidad/calendario/restricción
-- [ ] #3 Pruebas por tipo de restricción
+- [x] #1 Incumplimientos detectados y reportados
+- [x] #2 Explicabilidad por dependencia/capacidad/calendario/restricción
+- [x] #3 Pruebas por tipo de restricción
 <!-- AC:END -->

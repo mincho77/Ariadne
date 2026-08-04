@@ -93,6 +93,28 @@ for (const entry of manifest.scenarios) {
       const first = plan.tasks[0];
       assert.notEqual(first.startDate, expect.firstWorkingStartNot);
     }
+    if (expect.deadlineViolations != null) {
+      assert.equal(plan.summary.deadlineViolations, expect.deadlineViolations);
+    }
+    if (expect.violationCodes) {
+      assert.ok(plan.tasks.some((task) => (task.violations || []).some((item) => expect.violationCodes.includes(item.code))));
+    }
+    if (expect.diagnosticCodes) {
+      for (const [id, codes] of Object.entries(expect.diagnosticCodes)) {
+        const task = plan.tasks.find((item) => item.id === id);
+        assert.ok(task, `missing task ${id}`);
+        for (const code of codes) {
+          assert.ok((task.diagnostics || []).some((item) => item.code === code), `${id} missing diagnostic ${code}`);
+        }
+      }
+    }
+    if (expect.startOnOrAfter) {
+      for (const [id, date] of Object.entries(expect.startOnOrAfter)) {
+        const task = plan.tasks.find((item) => item.id === id);
+        assert.ok(task, `missing task ${id}`);
+        assert.ok(task.startDate >= date, `${id} starts ${task.startDate} before ${date}`);
+      }
+    }
   });
 }
 

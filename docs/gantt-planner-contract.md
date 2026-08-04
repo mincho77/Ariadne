@@ -22,12 +22,13 @@ Stable JSON shape returned by `GET /api/projects/{slug}/gantt`.
 - `totalTasks`, `doneTasks`, `pendingTasks`, `completionRate`
 - `estimatedPendingIaHours`, `estimatedPendingDays`
 - `blockedByDependencies`, `unresolvedDependencies`, `cycleDetected`
+- `deadlineViolations`, `restrictionViolations`
 
 ## `tasks[]` item (scheduled)
 
 Required: `id`, `title`, `status`, `startIaHour`, `endIaHour`, `startDate`, `endDate`, `lane`, `durationIaHours`.
 
-Optional: `dependencyLinks`, `pendingDependencies`, `canRunInParallel`.
+Optional: `dependencyLinks`, `pendingDependencies`, `canRunInParallel`, `diagnostics[]`, `violations[]`, `scheduleDrivers[]`.
 
 ## `dependencyEdges[]`
 

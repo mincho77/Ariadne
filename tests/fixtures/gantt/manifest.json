@@ -39,6 +39,16 @@
       "id": "colombia-holiday",
       "dir": "colombia-holiday",
       "description": "Start on holiday skips to next working day"
+    },
+    {
+      "id": "not-before",
+      "dir": "not-before",
+      "description": "not_before pushes scheduled start later"
+    },
+    {
+      "id": "deadline-violation",
+      "dir": "deadline-violation",
+      "description": "Short deadline marks violation in diagnostics"
     }
   ]
 }

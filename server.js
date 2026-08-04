@@ -69,11 +69,14 @@ const {
   parseDependencySpec,
   toPlanningTask,
 } = require('./lib/gantt');
+const { evaluateDependencyGate, assertCanStartWork, normalizeGatePolicy } = require('./lib/dependency-gate');
+const { taskDependencyGateStyles, taskDependencyGateHtml } = require('./board-dependency-gate');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
 const BOARD_PORT = Number(process.env.ARIADNE_BOARD_PORT || 6421);
 const GANTT_BASE_URL = String(process.env.ARIADNE_GANTT_BASE_URL || 'http://localhost:63447/');
+const DEPENDENCY_GATE_POLICY = normalizeGatePolicy(process.env.ARIADNE_DEPENDENCY_GATE_POLICY);
 const HOST = '127.0.0.1';
 const CATALOG = path.resolve(process.env.ARIADNE_CATALOG_PATH || path.join(ROOT, 'projects.json'));
 const BACKLOG = path.join(ROOT, 'node_modules', '.bin', 'backlog');
@@ -760,11 +763,18 @@ async function updateQueueOrder(project, orderedIds) {
   return fullOrder;
 }
 
+function dependencyGateForTask(task, tasks) {
+  return evaluateDependencyGate(task, tasks, { policy: DEPENDENCY_GATE_POLICY });
+}
+
 async function updateTaskStatus(project, taskId, status) {
   const allowed = new Set(['To Do', 'Queued', 'In Progress', 'Done']);
   if (!allowed.has(status)) throw new Error('estado de tarea inválido');
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
+  if (status === 'In Progress') {
+    assertCanStartWork(task, projectTasks(project), { policy: DEPENDENCY_GATE_POLICY });
+  }
   const wasQueued = task.status.toLowerCase() === 'queued';
   if (status === 'Queued') {
     await ensureTaskQueued(project, task);
@@ -1079,11 +1089,13 @@ function queueBoardPage(project) {
       const searchable = `${task.id} ${task.title} ${task.priority} ${task.type} ${task.effectiveSubstatus || ''} ${task.nextAction || ''} ${task.file}`.toLowerCase();
       const queuePosition = queue ? `<span class="queue-position" title="Posición en la cola"><small>Turno</small>${position + 1}</span>` : '';
       const dragHint = queue ? 'Drag to reorder queue' : 'Drag to change status';
+      const depGate = taskDependencyGateHtml(dependencyGateForTask(task, tasks), escapeHtml);
       return `<div role="button" tabindex="0" draggable="true" class="task${queue ? ' queue-task' : ''}${queue && position === 0 ? ' queue-next' : ''}" data-task="${index}" data-task-id="${escapeHtml(task.id)}" data-status="${escapeHtml(task.status)}" data-search="${escapeHtml(searchable)}">
         ${queuePosition}
         <span class="task-heading"><strong class="task-id">${escapeHtml(task.id || 'SIN JM')}</strong><strong class="task-title">${escapeHtml(task.title)}</strong></span>
         <span class="task-meta"><span class="priority priority-${priorityRank(task.priority)}">${escapeHtml(task.priority)}</span><span class="type type-${escapeHtml(task.type)}">${escapeHtml(task.type)}</span></span>
         ${taskCardSubstatusHtml(task, escapeHtml)}
+        ${depGate}
         ${boardDragHintHtml(dragHint)}
       </div>`;
     }).join('') || `<p class="empty">${queue ? 'Arrastra aquí lo próximo que quieres ejecutar.' : 'Sin tareas'}</p>`;
@@ -1093,7 +1105,15 @@ function queueBoardPage(project) {
       <div class="task-list" data-drop-status="${escapeHtml(status)}">${content}<p class="search-empty">Sin coincidencias en esta columna.</p></div>
     </section>`;
   }).join('');
-  const taskData = JSON.stringify(tasks.map(({ id, title, status, priority, type, file, source, substatus, nextAction, effectiveSubstatus }) => ({ id, title, status, priority, type, file, detailHtml: taskDetailHtml(source), source, substatus, nextAction, effectiveSubstatus }))).replace(/</g, '\\u003c');
+  const taskData = JSON.stringify(tasks.map((task) => {
+    const { id, title, status, priority, type, file, source, substatus, nextAction, effectiveSubstatus } = task;
+    return {
+      id, title, status, priority, type, file,
+      detailHtml: taskDetailHtml(source),
+      source, substatus, nextAction, effectiveSubstatus,
+      dependencyGate: dependencyGateForTask(task, tasks),
+    };
+  })).replace(/</g, '\\u003c');
   const nextBanner = queuedNext
     ? `<section class="next-up"><span class="next-number">01</span><div class="next-copy"><span class="eyebrow">SIGUIENTE A EJECUTAR</span><h2>${escapeHtml(queuedNext.id)} · ${escapeHtml(queuedNext.title)}</h2><p><span class="priority priority-${priorityRank(queuedNext.priority)}">${escapeHtml(queuedNext.priority)}</span> Está primero en la cola operativa.</p></div><button class="primary" data-open-id="${escapeHtml(queuedNext.id)}">Ver detalle</button></section>`
     : '<section class="next-up empty-next"><span class="next-number">00</span><div class="next-copy"><span class="eyebrow">COLA DE EJECUCIÓN</span><h2>La cola está vacía</h2><p>Arrastra aquí la próxima tarea que quieres autorizar.</p></div></section>';
@@ -1117,7 +1137,7 @@ h1{margin:6px 0 4px;font-size:32px}.muted{color:#9aaac0}.toolbar{display:flex;ga
 .task-heading{display:grid;gap:5px;line-height:1.35}.task-id{color:#78dfcd;font-size:12px;letter-spacing:.06em}.task-title{font-size:13px}.task-meta{display:flex;gap:6px;margin-top:10px}.drag-hint{display:block;color:#71859e;font-size:10px;margin-top:10px}.queue-task{padding-left:52px;background:#292344;border-color:#594a88}.queue-task:hover{border-color:#a78bfa}.queue-next{background:linear-gradient(135deg,#3a2b64,#292344);border-color:#9a7cf0;box-shadow:0 6px 18px #150a3555}.queue-position{position:absolute;left:11px;top:13px;display:grid;place-items:center;width:31px;height:40px;border-radius:9px;background:#6d4bd2;color:#fff;font-size:16px;font-weight:900}.queue-position small{margin:0;color:#ddd6fe;font-size:7px;text-transform:uppercase;letter-spacing:.08em}
 .priority,.type,.badge{display:inline-block;border-radius:999px;padding:3px 8px;font-weight:800;font-size:11px}.priority-0{background:#991b1b;color:#fee2e2}.priority-1{background:#92400e;color:#ffedd5}.priority-2{background:#164e63;color:#a5f3fc}.priority-3{background:#334155;color:#cbd5e1}.type{background:#183d42;color:#80e2d0}.type-bug{background:#be123c;color:#ffe4e6}
 .empty{color:#75869b;font-size:12px;line-height:1.5;padding:18px 8px;text-align:center;flex:1 1 auto;display:grid;place-items:center}.search-empty{display:none;color:#9aaac0;font-size:12px;line-height:1.5;padding:16px 8px;text-align:center;border:1px dashed #344a67;border-radius:11px;margin:9px 0}.column.search-no-results .search-empty{display:block}.column.search-no-results .empty{display:none}.primary,.secondary,.queue-action,.move-button,.delete-button{border:0;border-radius:9px;padding:10px 14px;font-weight:800;cursor:pointer}.primary,.queue-action{background:#73d8c6;color:#102131}.secondary{background:#334155;color:#e8eef8}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
-${boardDeleteStyles('mejoras')}${boardCardInteractionStyles('default')}${boardSubstatusStyles()}${boardTaskDetailStyles('default')}.status-actions{display:flex;gap:7px;flex-wrap:wrap;padding:13px;background:#111d30;border:1px solid #2c405b;border-radius:12px;margin-top:18px}.status-actions:before{content:"Mover a";width:100%;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.move-button{background:#263a55;color:#dce7f5;padding:8px 11px;font-size:11px}.move-button:hover{background:#365171}.move-button.current{display:none}
+${boardDeleteStyles('mejoras')}${boardCardInteractionStyles('default')}${boardSubstatusStyles()}${boardTaskDetailStyles('default')}${taskDependencyGateStyles()}.status-actions{display:flex;gap:7px;flex-wrap:wrap;padding:13px;background:#111d30;border:1px solid #2c405b;border-radius:12px;margin-top:18px}.status-actions:before{content:"Mover a";width:100%;color:#7f92aa;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.move-button{background:#263a55;color:#dce7f5;padding:8px 11px;font-size:11px}.move-button:hover{background:#365171}.move-button.current{display:none}
 .modal{display:none;position:fixed;inset:0;background:#020713d9;align-items:center;justify-content:center;padding:20px;z-index:10;backdrop-filter:blur(5px)}.modal.open{display:flex}.panel{background:#142238;border:1px solid #405674;border-radius:18px;max-width:980px;width:100%;max-height:90vh;overflow:auto;padding:0;box-shadow:0 24px 80px #0009}.panel-header{position:sticky;top:0;z-index:2;padding:24px 28px 20px;background:#142238ee;border-bottom:1px solid #2c405b;backdrop-filter:blur(12px)}.panel-header h2{margin:8px 40px 8px 0;font-size:24px;line-height:1.25}.close{position:absolute;right:20px;top:18px;background:#24364e;border:0;border-radius:10px;color:#b8c5d6;font-size:22px;width:38px;height:38px;cursor:pointer}.meta{display:flex;gap:8px;flex-wrap:wrap;margin:0}.detail-file{color:#7689a2;font-size:11px}.panel-body{padding:24px 28px 30px}.source-editor{width:100%;min-height:360px;background:#0b1524;border:1px solid #344a67;border-radius:12px;color:#e8eef8;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:14px;resize:vertical}.source-editor:focus{outline:2px solid #73d8c6;outline-offset:2px}.edit-hint{color:#8da0b9;font-size:12px;margin:0 0 10px}.edit-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.badge{background:#183d42;color:#80e2d0}.error{color:#fecaca;min-height:18px}
 @media(max-width:1250px){.board{grid-template-columns:repeat(2,minmax(280px,1fr))}}@media(max-width:700px){body{padding:18px}.board{grid-template-columns:1fr}.toolbar,.next-up{align-items:stretch;flex-direction:column}.next-number{flex-basis:48px}.search{max-width:none}.panel-header,.panel-body{padding-left:18px;padding-right:18px}}
 </style>
@@ -1560,4 +1580,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask };
