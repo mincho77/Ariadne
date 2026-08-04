@@ -27,4 +27,5 @@ Smoke automatizado para entornos cloud (Cursor Agent): npm install, Hub HTTP, AP
 <!-- AC:BEGIN -->
 - [x] #1 Test smoke:cloud verde en VM sin macOS LaunchAgents
 - [x] #2 Documentación cloud-dev-environment + AGENTS.md
+- [x] #3 smoke:cloud cubre ariadne:sync y ariadne:launcher (AH-E-30)
 <!-- AC:END -->

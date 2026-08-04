@@ -5,7 +5,7 @@
 - Última actualización: 2026-08-04
 - Objetivo: evolucionar el Gantt de Ariadne hacia planificación, ejecución, seguimiento y reprogramación integrados con Kanban, Queue y ledgers, manteniendo Markdown como fuente de verdad.
 - Gate actual: **AH-E-9 … AH-E-29 cerradas** — programa Gantt integrado completo.
-- Próxima acción: merge PR #1 a `master`; mantenimiento Hub (AH-E-2 … AH-E-7) según backlog.
+- Próxima acción: mantenimiento; UI Gantt externa (AGANTT-DEF-01) fuera del repo.
 
 ## Alcance
 

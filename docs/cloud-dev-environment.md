@@ -15,6 +15,7 @@ Regresión completa:
 
 ```bash
 npm test
+npm run ariadne:sync -- --fix   # post-edit ledgers
 npm run gantt:smoke
 npm run gantt:audit    # dry-run; exit 1 si hay issues en backlog real
 ```
@@ -38,6 +39,7 @@ npm run gantt:audit    # dry-run; exit 1 si hay issues en backlog real
 
 1. `npm install`
 2. `npm run smoke:cloud`
-3. Tras cambios Gantt: `npm test` + `python3 skills/ariadne/scripts/check_plan.py docs/plans/ariadne-gantt.md`
+3. Tras editar ledgers: `npm run ariadne:sync -- --fix`
+4. Tras cambios Gantt: `npm test` + `python3 skills/ariadne/scripts/check_plan.py docs/plans/ariadne-gantt.md`
 
 Ver también `docs/gantt-operaciones.md` y `AGENTS.md`.

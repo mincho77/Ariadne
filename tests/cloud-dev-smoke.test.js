@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const { validateGanttPlanForUi } = require('../lib/gantt/ui-contract');
 
@@ -119,7 +119,35 @@ test('cloud dev smoke: hub APIs and gantt stack over HTTP', { timeout: 30000 }, 
 
 test('cloud dev smoke: package scripts exist for agent workflows', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-  for (const script of ['test', 'gantt:smoke', 'gantt:audit', 'smoke:cloud']) {
+  for (const script of [
+    'test',
+    'gantt:smoke',
+    'gantt:audit',
+    'smoke:cloud',
+    'smoke:lifecycle',
+    'ariadne:audit',
+    'ariadne:audit:fix',
+    'ariadne:sync',
+    'ariadne:launcher',
+    'ariadne:route-hint',
+  ]) {
     assert.ok(pkg.scripts[script], `missing npm script ${script}`);
   }
+});
+
+test('cloud dev smoke: ariadne sync and launcher CLIs exit 0', () => {
+  const root = path.join(__dirname, '..');
+  const sync = spawnSync(process.execPath, ['scripts/ariadne-sync.js', '--json'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  assert.equal(sync.status, 0, sync.stderr || sync.stdout);
+  assert.equal(JSON.parse(sync.stdout).ok, true);
+
+  const launcher = spawnSync(process.execPath, ['scripts/ariadne-launcher.js', 'actualiza el ledger'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  assert.equal(launcher.status, 0, launcher.stderr);
+  assert.equal(JSON.parse(launcher.stdout).skill, 'ariadne-lite');
 });
