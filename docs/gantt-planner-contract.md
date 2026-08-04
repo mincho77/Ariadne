@@ -98,6 +98,10 @@ The editable Gantt diagram runs in a separate frontend (`localhost:63447` by def
 
 `GET /api/projects` includes `ganttMetrics` per project; dedicated endpoint `GET /api/projects/{slug}/gantt/metrics`. See `docs/gantt-hub-metrics.md`.
 
+## Portfolio (AH-E-28)
+
+`GET /api/gantt/portfolio` aggregates all catalog projects. Hub page: `/portfolio.html`. See `docs/gantt-portfolio.md`.
+
 ## Resources (AH-E-25)
 
 Optional `resourceAware=1` query param. Task fields `assignee`, `required_skills`, `resource_type`; config `backlog/docs/gantt/resources.config.json`. See `docs/gantt-resources.md`.
@@ -109,3 +113,7 @@ Plan includes `slack.logicalCriticalPath`, `slack.resourceCriticalPath`, and per
 ## What-if scenarios (AH-E-27)
 
 `POST /api/projects/{slug}/gantt/what-if` simulates overrides and task patches without persisting unless `confirmAdopt` + `confirmToken: ADOPT`. See `docs/gantt-what-if.md`.
+
+## Operations and release (AH-E-29)
+
+Manual: `docs/gantt-operaciones.md`. Audit dry-run: `npm run gantt:audit`.

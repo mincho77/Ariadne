@@ -810,6 +810,22 @@ test('what-if API simulates without persisting and requires ADOPT token to adopt
   }
 });
 
+test('portfolio API returns multi-project aggregate over HTTP', { timeout: 20000 }, async () => {
+  const { catalogPath } = createBaselineHttpSandbox('ariadne-http-portfolio-');
+  const { port, child } = await startHttpServerForTest(catalogPath);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/gantt/portfolio?includeDone=0&startDate=2026-08-04&capacity=1`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.summary.projectCount >= 1);
+    assert.ok(Array.isArray(body.projects));
+    assert.ok(Array.isArray(body.milestones));
+    assert.ok(Array.isArray(body.crossProjectDependencies));
+  } finally {
+    await stopProcess(child);
+  }
+});
+
 test('updateTaskChecklist suggests progress without overwriting remaining or progress by default', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-checklist-suggest-'));
   const dir = path.join(root, 'backlog', 'tasks');

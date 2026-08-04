@@ -172,7 +172,7 @@ Las relaciones **SS** y **FF** permiten solapamiento (paralelismo parcial). **FS
 
 ## 6. Motor de planificación (`buildProjectGantt`)
 
-Implementación en `server.js`. Resumen del algoritmo:
+Implementación en `lib/gantt/scheduler.js` (expuesto vía `buildProjectGantt()` en `server.js`). Resumen del algoritmo:
 
 ```
 1. Cargar tareas del proyecto
@@ -250,8 +250,17 @@ GET /api/projects/{slug}/gantt
 | `startDate` | hoy | Inicio del calendario (`YYYY-MM-DD`) |
 | `workOnSaturday` | `0` | `1` = sábados laborables |
 | `holidays` | — | CSV de fechas ISO extra |
+| `resourceAware` | `0` | `1` = pools de recursos (`docs/gantt-resources.md`) |
 
-### 7.3 Capacidad IA
+### 7.3 Portafolio multiproyecto
+
+```
+GET /api/gantt/portfolio
+```
+
+Vista agregada de todos los proyectos del catálogo: métricas, hitos, riesgos y dependencias `slug:taskId` cross-project. UI Hub: `/portfolio.html`. Ver `docs/gantt-portfolio.md`.
+
+### 7.4 Capacidad IA
 
 ```
 GET  /api/projects/{slug}/ai-capacity-config
@@ -262,7 +271,7 @@ POST /api/projects/{slug}/ai-operators
 
 Archivo persistido: `{proyecto}/backlog/docs/ai-capacity.config.json`
 
-### 7.4 Dependencias de tarea
+### 7.5 Dependencias de tarea
 
 ```
 POST /api/projects/{slug}/tasks/dependencies
@@ -416,7 +425,17 @@ curl -s "http://127.0.0.1:4177/api/projects/jurismate/gantt?includeDone=0" \
 curl -s http://127.0.0.1:4177/api/projects/jurismate/ai-capacity-config
 ```
 
-Script auxiliar: `scripts/check-ai-capacity-config.sh`
+### Smoke y auditoría
+
+```bash
+npm test
+npm run gantt:smoke
+npm run gantt:audit    # dry-run readiness backlog Gantt
+```
+
+Manual operativo completo: **`docs/gantt-operaciones.md`**.
+
+Script auxiliar capacidad: `scripts/check-ai-capacity-config.sh`
 
 ### Señales de problemas
 
@@ -449,6 +468,8 @@ Casos relevantes en `server.test.js`:
 
 | Archivo | Contenido |
 |---------|-----------|
+| `docs/gantt-operaciones.md` | Manual operativo y cierre release |
+| `docs/gantt-portfolio.md` | Vista multiproyecto |
 | `docs/plans/dependency-relations-project-style.md` | Diseño de dependencias tipo MS Project |
 | `docs/plans/dependency-relations-migration-ops.md` | Guía operativa y migración legacy |
 | `docs/ARQUITECTURA.md` | Arquitectura general de Ariadne |

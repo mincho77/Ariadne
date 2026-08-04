@@ -12,6 +12,7 @@
     "start": "node server.js",
     "test": "node --test",
     "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
+    "gantt:audit": "node scripts/gantt-backlog-audit.js --all",
     "task:create": "node scripts/create-task.js",
     "bug:create": "node scripts/create-task.js",
     "queue:bugs": "node scripts/bug-queue-runner.js",

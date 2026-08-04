@@ -1,10 +1,10 @@
 ---
 id: AH-E-28
 title: GANTT · Vista portafolio multiproyecto
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-05 00:15'
 labels:
   - gantt
   - fase-5
@@ -20,6 +20,7 @@ dependencies:
 epic: 'Gantt integrado'
 references:
   - docs/plans/ariadne-gantt.md
+  - docs/gantt-portfolio.md
 ---
 
 ## Description
@@ -30,6 +31,6 @@ Vista portafolio: todos los proyectos, hitos, riesgos, capacidad compartida, dep
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 API o página multiproyecto
-- [ ] #2 Documentación operativa
+- [x] #1 API o página multiproyecto
+- [x] #2 Documentación operativa
 <!-- AC:END -->

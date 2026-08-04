@@ -274,6 +274,14 @@ Esta clasificación es puramente lógica; no mueve archivos entre carpetas.
 | `GET` | `/api/projects` | Lista proyectos con estadísticas (`summarize()`) |
 | `POST` | `/api/projects` | Crea proyecto, opcional `backlog init` |
 | `POST` | `/api/projects/:slug/browser` | Devuelve URL del tablero (`openBoard()`) |
+| `GET` | `/portfolio.html` | Vista portafolio Gantt multiproyecto |
+| `GET` | `/api/gantt/portfolio` | Agregado métricas/hitos/riesgos de todos los proyectos |
+| `GET` | `/api/projects/:slug/gantt` | Plan JSON del planificador (`lib/gantt/`) |
+| `GET` | `/api/projects/:slug/gantt/metrics` | Métricas Hub dedicadas |
+| `POST` | `/api/projects/:slug/gantt/what-if` | Escenarios simulados (sin persistir por defecto) |
+| `GET/POST` | `/api/projects/:slug/gantt/baselines` | Líneas base inmutables |
+
+Motor modular en `lib/gantt/*` (scheduler, restrictions, baselines, hub-metrics, portfolio, what-if). Documentación: `docs/GANTT.md`, manual `docs/gantt-operaciones.md`.
 
 `summarize(project)` calcula por proyecto:
 

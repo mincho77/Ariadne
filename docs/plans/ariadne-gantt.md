@@ -1,11 +1,11 @@
 # Plan: Gantt integrado Ariadne
 
 ## Control
-- Estado: en_progreso
+- Estado: **cerrado** (MVP + avanzado T01–T21)
 - Última actualización: 2026-08-04
 - Objetivo: evolucionar el Gantt de Ariadne hacia planificación, ejecución, seguimiento y reprogramación integrados con Kanban, Queue y ledgers, manteniendo Markdown como fuente de verdad.
-- Gate actual: AH-E-9 … AH-E-27 cerradas; siguiente AH-E-29 (endurecimiento MVP) o AH-E-28 (portafolio).
-- Próxima acción: AH-E-29 endurecimiento MVP o AH-E-28 portafolio multiproyecto.
+- Gate actual: **AH-E-9 … AH-E-29 cerradas** — programa Gantt integrado completo.
+- Próxima acción: mantenimiento / AH-E-28+ evoluciones futuras fuera de alcance MVP.
 
 ## Alcance
 
@@ -62,8 +62,8 @@
 | AH-E-25 | 5 Avanzado | Recursos y capacidad por habilidad | hecho | AH-E-11, AH-E-12, AH-E-13 | assignee, skills, resource_type | lib/gantt/resources.js; docs/gantt-resources.md; resourceAware=1 | Habilitar AH-E-26 |
 | AH-E-26 | 5 Avanzado | Holgura y CP condicionada | hecho | AH-E-16, AH-E-25 | Slack y CP lógica vs recursos | lib/gantt/slack.js; docs/gantt-slack.md; escenario resource-pool-capacity | Habilitar AH-E-27 |
 | AH-E-27 | 5 Avanzado | Escenarios qué-pasa-si | hecho | AH-E-19, AH-E-25, AH-E-26 | Simulación sin persistir | lib/gantt/what-if.js; POST /gantt/what-if; docs/gantt-what-if.md | Habilitar AH-E-29 |
-| AH-E-28 | 5 Avanzado | Vista portafolio multiproyecto | pendiente | AH-E-24, AH-E-26, AH-E-27 | Vista cross-project | - | Post AH-E-29 |
-| AH-E-29 | 6 Release | Migración y endurecimiento MVP | pendiente | AH-E-9, AH-E-10, AH-E-11, AH-E-12, AH-E-13, AH-E-14, AH-E-15, AH-E-16, AH-E-17, AH-E-18, AH-E-19, AH-E-20, AH-E-21, AH-E-22, AH-E-23, AH-E-24 | Docs, dry-run, perf 1000 tareas | - | Al cerrar MVP |
+| AH-E-28 | 5 Avanzado | Vista portafolio multiproyecto | hecho | AH-E-24, AH-E-26, AH-E-27 | Vista cross-project | lib/gantt/portfolio.js; GET /api/gantt/portfolio; portfolio.html; docs/gantt-portfolio.md | — |
+| AH-E-29 | 6 Release | Migración y endurecimiento MVP | hecho | AH-E-9 … AH-E-24 | Docs, dry-run, perf 1000 tareas | docs/gantt-operaciones.md; gantt-backlog-audit.js; tests/gantt-perf.test.js; npm test 154+ | Programa cerrado |
 
 ## Riesgos
 
@@ -117,6 +117,10 @@
 - 2026-08-04: AH-E-24 cerrada — métricas Gantt en tarjetas Hub y GET /gantt/metrics.
 
 - 2026-08-04: AH-E-25 … AH-E-27 cerradas — recursos por pool, holgura/CP condicionada, escenarios what-if sin persistir.
+
+- 2026-08-04: AH-E-28 cerrada — portafolio multiproyecto (`/api/gantt/portfolio`, `/portfolio.html`).
+
+- 2026-08-04: AH-E-29 cerrada — manual operativo, audit dry-run, perf 1000 tareas, docs GANTT/ARQUITECTURA actualizados; npm test verde.
 
 ## Evidencias
 

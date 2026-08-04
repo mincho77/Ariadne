@@ -1,10 +1,10 @@
 ---
 id: AH-E-29
 title: GANTT · Migración, documentación y endurecimiento MVP
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-04 17:10'
-updated_date: '2026-08-04 17:10'
+updated_date: '2026-08-05 00:15'
 labels:
   - gantt
   - fase-6
@@ -33,6 +33,7 @@ dependencies:
 epic: 'Gantt integrado'
 references:
   - docs/plans/ariadne-gantt.md
+  - docs/gantt-operaciones.md
 ---
 
 ## Description
@@ -43,7 +44,7 @@ Migración dry-run, docs, smoke, regresión, rendimiento 1000 tareas, reversión
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 npm test verde
-- [ ] #2 Manual operativo Gantt
-- [ ] #3 Evidencia en ledger
+- [x] #1 npm test verde
+- [x] #2 Manual operativo Gantt
+- [x] #3 Evidencia en ledger
 <!-- AC:END -->

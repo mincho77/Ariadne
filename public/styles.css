@@ -365,3 +365,59 @@ input {
   h1 { font-size: 32px; }
   .lanes { grid-template-columns: 1fr; }
 }
+
+.nav-link {
+  color: var(--mejoras);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.nav-link:hover { text-decoration: underline; }
+
+.portfolio-summary { margin-bottom: 24px; }
+
+.portfolio-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.portfolio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.portfolio-card { min-height: 180px; }
+
+.section-title {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+
+.portfolio-table-wrap { overflow-x: auto; margin-bottom: 32px; }
+
+.portfolio-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.portfolio-table th,
+.portfolio-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.portfolio-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+

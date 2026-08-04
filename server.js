@@ -91,6 +91,7 @@ const {
 const { buildHubGanttMetrics } = require('./lib/gantt/hub-metrics');
 const { readResourceConfig } = require('./lib/gantt/resources');
 const { runWhatIfScenario } = require('./lib/gantt/what-if');
+const { buildGanttPortfolio } = require('./lib/gantt/portfolio');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -219,7 +220,7 @@ function buildProjectGantt(project, options = {}) {
 }
 
 function ganttOptionsFromRequest(url, project) {
-  const config = readAiCapacityConfig(project);
+  const config = project ? readAiCapacityConfig(project) : null;
   const queryCapacity = url.searchParams.get('capacity');
   const capacity = queryCapacity
     ? Number(queryCapacity || '2')
@@ -272,6 +273,16 @@ function buildProjectGanttMetrics(project, ganttOptions = {}) {
   return buildHubGanttMetrics(plan, {
     baseline: baselinePayload,
     baselineCompare,
+  });
+}
+
+function buildPortfolioGantt(ganttOptions = {}) {
+  return buildGanttPortfolio(readCatalog(), ganttOptions, {
+    buildProjectGantt,
+    buildProjectGanttMetrics,
+    projectTasks,
+    readAiCapacityConfig,
+    projectExists: (project) => fs.existsSync(project.path),
   });
 }
 
@@ -1353,6 +1364,14 @@ async function handle(req, res) {
       hubPort: PORT,
       boardPort: BOARD_PORT,
     }));
+  }
+  if (req.method === 'GET' && url.pathname === '/api/gantt/portfolio') {
+    try {
+      const portfolio = buildPortfolioGantt(ganttOptionsFromRequest(url, null));
+      return json(res, 200, portfolio);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
   }
   const gantt = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt$/);
   if (req.method === 'GET' && gantt) {
