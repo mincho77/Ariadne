@@ -4,7 +4,7 @@ title: HUB · Cloud dev environment smoke test
 status: Done
 assignee: []
 created_date: '2026-07-30 19:10'
-updated_date: '2026-08-05 00:30'
+updated_date: '2026-08-04 18:50'
 priority: Medium
 type: enhancement
 ordinal: 1000
@@ -14,13 +14,15 @@ labels:
   - smoke
 references:
   - docs/cloud-dev-environment.md
+  - docs/ariadne-automation.md
   - AGENTS.md
+  - tests/cloud-dev-smoke.test.js
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Smoke automatizado para entornos cloud (Cursor Agent): npm install, Hub HTTP, APIs Gantt/portafolio y scripts npm sin depender de UI :63447.
+Smoke automatizado para entornos cloud (Cursor Agent): npm install, Hub HTTP, APIs Gantt/portafolio, scripts npm (`ariadne:sync`, `launcher`, etc.) sin depender de UI :63447.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
