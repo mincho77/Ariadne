@@ -25,7 +25,20 @@ Variables:
 |----------|---------|-----|
 | `ARIADNE_HUB_PORT` | `4177` | API backend |
 | `ARIADNE_GANTT_BASE_URL` | `http://localhost:63447/` | URL de la UI |
-| `ARIADNE_GANTT_UI_REPO` | GitHub frontend-angular | Metadato en contrato |
+| `ARIADNE_GANTT_UI_REPO` | GitHub frontend-angular | Metadato en contrato; override si el repo se movió |
+| `ARIADNE_GANTT_UI_PORT` | `63447` | Puerto default documentado en contrato |
+
+## Bootstrap / diagnóstico (AGANTT-DEF-01)
+
+```bash
+npm run gantt:ui:bootstrap          # texto: repo remoto + probe HTTP UI
+npm run gantt:ui:bootstrap -- --json
+npm run gantt:ui:bootstrap -- --strict   # exit 1 si git ls-remote falla
+```
+
+El script **no clona** el frontend. Verifica `git ls-remote` contra `ARIADNE_GANTT_UI_REPO`, hace probe HTTP a `ARIADNE_GANTT_BASE_URL` e imprime pasos de arranque. En cloud el repo documentado suele responder 404 — el backend sigue listo vía `npm run gantt:smoke`.
+
+Implementación: `lib/gantt/ui-probe.js`, `scripts/gantt-ui-bootstrap.js`.
 
 ## Descubrimiento
 
@@ -91,6 +104,7 @@ El Hub responde `Access-Control-Allow-Origin: *` y permite `GET`, `POST`, `PATCH
 
 ```bash
 npm run gantt:smoke
+npm run gantt:ui:bootstrap   # diagnóstico repo + UI (AGANTT-DEF-01)
 ```
 
 Valida:

@@ -31,7 +31,7 @@ npm run gantt:audit    # dry-run; exit 1 si hay issues en backlog real
 
 ## Limitaciones conocidas
 
-- **AGANTT-DEF-01:** frontend Angular no está en el workspace; el smoke verifica contrato API, no la UI visual.
+- **AGANTT-DEF-01:** frontend Angular no está en el workspace; el smoke verifica contrato API, no la UI visual. Diagnóstico: `npm run gantt:ui:bootstrap` (repo Git + probe HTTP; exit 0 informativo).
 - **`projects.json`** es local por máquina; en cloud los tests usan catálogo temporal.
 - **LaunchAgents macOS** no aplican en Linux cloud.
 

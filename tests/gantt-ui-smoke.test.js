@@ -13,6 +13,7 @@ const {
   validateGanttPlanForUi,
   FRONTEND_REPO,
 } = require('../lib/gantt/ui-contract');
+const { probeGanttUiReachability } = require('../lib/gantt/ui-probe');
 const { buildProjectGanttFromTasks } = require('../lib/gantt/scheduler');
 const { parseTask } = require('../server');
 
@@ -151,14 +152,8 @@ test('gantt UI smoke: hub-config, contract, plan JSON, launch URL', { timeout: 2
     const launchUrl = buildGanttLaunchUrl(hubBody.ganttBaseUrl, 'demo-gantt-ui');
     assert.match(launchUrl, /project=demo-gantt-ui/);
 
-    let uiReachable = false;
-    try {
-      const uiProbe = await fetch(ganttBaseUrl, { signal: AbortSignal.timeout(800) });
-      uiReachable = uiProbe.status < 500;
-    } catch {
-      uiReachable = false;
-    }
-    assert.equal(uiReachable, false, 'external UI should not be running in smoke sandbox');
+    const uiProbe = await probeGanttUiReachability(ganttBaseUrl, { timeoutMs: 800 });
+    assert.equal(uiProbe.reachable, false, 'external UI should not be running in smoke sandbox');
   } finally {
     await stopProcess(child);
   }
