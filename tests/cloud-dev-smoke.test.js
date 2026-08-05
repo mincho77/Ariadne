@@ -122,6 +122,7 @@ test('cloud dev smoke: package scripts exist for agent workflows', () => {
   for (const script of [
     'test',
     'gantt:smoke',
+    'gantt:ui:bootstrap',
     'gantt:audit',
     'smoke:cloud',
     'smoke:lifecycle',
@@ -150,4 +151,13 @@ test('cloud dev smoke: ariadne sync and launcher CLIs exit 0', () => {
   });
   assert.equal(launcher.status, 0, launcher.stderr);
   assert.equal(JSON.parse(launcher.stdout).skill, 'ariadne-lite');
+
+  const bootstrap = spawnSync(process.execPath, ['scripts/gantt-ui-bootstrap.js', '--json'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  assert.equal(bootstrap.status, 0, bootstrap.stderr || bootstrap.stdout);
+  const bootstrapBody = JSON.parse(bootstrap.stdout);
+  assert.equal(bootstrapBody.blockId, 'AGANTT-DEF-01');
+  assert.equal(bootstrapBody.backend.ready, true);
 });

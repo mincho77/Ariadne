@@ -12,6 +12,7 @@
     "start": "node server.js",
     "test": "node --test",
     "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
+    "gantt:ui:bootstrap": "node scripts/gantt-ui-bootstrap.js",
     "gantt:audit": "node scripts/gantt-backlog-audit.js --all",
     "smoke:cloud": "node --test tests/cloud-dev-smoke.test.js",
     "smoke:lifecycle": "node --test tests/two-project-lifecycle.test.js",

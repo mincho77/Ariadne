@@ -56,4 +56,4 @@ Ledger: `docs/plans/ariadne-gantt.md` (AH-E-9 … AH-E-29 **cerrado**).
 
 ### UI Gantt externa
 
-Repo `frontend-angular` en `:63447` — fuera del workspace (AGANTT-DEF-01). Backend listo vía `npm run gantt:smoke`.
+Repo `frontend-angular` en `:63447` — fuera del workspace (AGANTT-DEF-01). Backend listo vía `npm run gantt:smoke`. Diagnóstico repo/UI: `npm run gantt:ui:bootstrap` (`lib/gantt/ui-probe.js`). Override repo: `ARIADNE_GANTT_UI_REPO`.

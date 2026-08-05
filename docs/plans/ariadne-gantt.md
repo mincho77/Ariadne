@@ -89,7 +89,7 @@
 
 | ID | Trabajo | Motivo | Condición de reactivación |
 |---|---|---|---|
-| AGANTT-DEF-01 | Edición visual completa en :63447 | Repo frontend no clonado en workspace | Contrato API + smoke en AH-E-23; clonar frontend-angular localmente | mitigado (backend) |
+| AGANTT-DEF-01 | Edición visual completa en :63447 | Repo frontend no clonado en workspace | `npm run gantt:ui:bootstrap`; override `ARIADNE_GANTT_UI_REPO` cuando exista URL válida | mitigado (backend + bootstrap) |
 | AGANTT-DEF-02 | Portafolio multiproyecto | Prioridad Low; no bloquea MVP | MVP cerrado | **cerrado** (AH-E-28) |
 
 ## Historial
@@ -123,6 +123,7 @@
 - 2026-08-04: AH-E-29 cerrada — manual operativo, audit dry-run, perf 1000 tareas, docs GANTT/ARQUITECTURA actualizados; npm test verde.
 
 - 2026-08-05: Post-release — README Gantt, AH-E-8 smoke cloud (`npm run smoke:cloud`), AGENTS.md, `.cursor/environment.json`.
+- 2026-08-05: AGANTT-DEF-01 — `npm run gantt:ui:bootstrap` (`lib/gantt/ui-probe.js`): probe repo Git + HTTP UI; smoke cloud incluye CLI; repo `repoxai/frontend-angular` sigue 404.
 
 ## Evidencias
 
