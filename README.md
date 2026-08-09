@@ -175,6 +175,17 @@ npm run smoke:cloud       # smoke entorno cloud / agente
 - **Portafolio:** `GET /api/gantt/portfolio` · Hub `/portfolio.html`
 - **Manual:** `docs/gantt-operaciones.md` · **Funcional:** `docs/GANTT.md`
 
+## Swarm CLI (opt-in)
+
+Adapter nativo Queue → Doing → evidencia (`docs/swarm/`, ledger `docs/plans/ariadne-e2e.md`):
+
+```bash
+npm run swarm -- status --project ariadne
+npm run swarm -- run --project ariadne
+npm run swarm -- handoff --task AH-E-32 --from coder --to cleaner --summary "…"
+npm run swarm -- complete --task AH-E-32 --evidence "npm test → ok"
+```
+
 Cloud agents: `AGENTS.md` y `docs/cloud-dev-environment.md`.
 
 Auditoría multiproyecto (ledgers + backlog Gantt):

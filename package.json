@@ -20,6 +20,8 @@
     "ariadne:sync": "node scripts/ariadne-sync.js",
     "ariadne:route-hint": "node scripts/ariadne-route-hint.js",
     "ariadne:launcher": "node scripts/ariadne-launcher.js",
+    "swarm": "node scripts/ariadne-swarm.js",
+    "ariadne-swarm": "node scripts/ariadne-swarm.js",
     "task:create": "node scripts/create-task.js",
     "bug:create": "node scripts/create-task.js",
     "queue:bugs": "node scripts/bug-queue-runner.js",
