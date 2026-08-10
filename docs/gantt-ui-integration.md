@@ -78,10 +78,29 @@ Contrato completo del plan: `docs/gantt-planner-contract.md`.
 | Acción | API |
 |--------|-----|
 | Campos temporales / progreso / bloqueos / jerarquía | `PATCH /api/projects/{slug}/tasks/{id}` + `If-Match: {sourceHash}` |
-| Dependencias | `POST /api/projects/{slug}/tasks/dependencies` |
+| **Autorizar a Queue** (drawer) | `POST /api/projects/{slug}/tasks/{id}/queue` body `{ "position": "end"\|"head", "ordinal"?: number }` |
+| Dependencias | `POST /api/projects/{slug}/tasks/{id}/dependencies` → use `.../tasks/dependencies` |
 | Línea base | `POST /api/projects/{slug}/gantt/baselines` |
 
-La UI **no** escribe Markdown crudo; usa PATCH atómico (AH-E-14).
+### Autorizar a Queue desde Gantt
+
+Persiste `status: Queued` y recalcula `ordinal` de toda la cola (`10, 20, 30…`):
+
+```bash
+curl -sS -X POST "http://127.0.0.1:4177/api/projects/ariadne/tasks/AH-E-43/queue" \
+  -H 'content-type: application/json' \
+  -d '{"position":"end"}'
+# cabeza de cola:
+curl -sS -X POST "http://127.0.0.1:4177/api/projects/ariadne/tasks/AH-E-43/queue" \
+  -H 'content-type: application/json' \
+  -d '{"position":"head"}'
+# slot por ordinal deseado (se normaliza):
+curl -sS -X POST "http://127.0.0.1:4177/api/projects/ariadne/tasks/AH-E-43/queue" \
+  -H 'content-type: application/json' \
+  -d '{"ordinal":20}'
+```
+
+La UI Angular debe exponer la acción en el drawer (contrato: `ganttUi.endpoints.taskQueueAuthorize` en `/api/hub-config`).
 
 ## CORS
 

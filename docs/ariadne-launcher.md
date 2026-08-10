@@ -38,12 +38,28 @@ Verbose:
 ARIADNE_LAUNCHER_VERBOSE=1 eval "$(./scripts/ariadne-launcher.sh 'mueve a cola')"
 ```
 
-## Integración Cursor / Codex
+## Ejemplo de uso (AH-E-39)
 
-1. En el hook o regla de preflight del agente, ejecutar `npm run ariadne:launcher -- "$USER_MESSAGE"`.
-2. Si `skill` es `ariadne-lite`, adjuntar solo `skills/ariadne-lite/SKILL.md` (+ ledger activo si aplica).
-3. Si `full`, cargar `skills/ariadne/SKILL.md`.
-4. **No** fuerza modelo en el cliente; `modelTier` es hint (`economy` vs `standard`).
+Pedido del usuario: *«mueve AH-E-41 a la cola»*
+
+```bash
+npm run ariadne:route-hint -- "mueve AH-E-41 a la cola"
+```
+
+Salida esperada (resumida):
+
+```json
+{
+  "mode": "lite",
+  "skill": "ariadne-lite",
+  "modelTier": "economy",
+  "reason": "matched lite pattern: ..."
+}
+```
+
+Luego el agente carga solo `skills/ariadne-lite/SKILL.md`. Pedido *«audita con Pharos y despliega»* → `mode: full` / `skill: ariadne`.
+
+En Cursor la regla siempre activa `.cursor/rules/ariadne-route.mdc` recuerda este preflight.
 
 ## Validación (ARIM-004)
 

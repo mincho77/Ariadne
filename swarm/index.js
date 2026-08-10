@@ -16,6 +16,47 @@ const {
   formatHandoffLine,
   formatEvidenceLine,
 } = require('./evidence');
+const { listPacks, getPack, suggestPack, recommendPackPolicy, modelHintForPack, modelHintFromTier } = require('./packs');
+const { buildTaskBrief, extractAcceptanceCriteria, extractPaths } = require('./brief');
+const { ensureRoleWorktree, listRoleWorktrees, WORKTREE_ROOT } = require('./worktrees');
+const {
+  applyCloseoutToTaskSource,
+  appendLedgerHistorial,
+  formatLedgerCheckpoint,
+  checkpointLedger,
+  markAcceptanceCriteriaDone,
+} = require('./closeout');
+const {
+  packRequiresSpecifier,
+  hasApprovableAcceptanceCriteria,
+  assertSpecifierBeforeCoder,
+  resolveStartingRole,
+  applySpecifierAcceptance,
+  hasSpecifierToCoderHandoff,
+} = require('./specifier-gate');
+const {
+  packRequiresQa,
+  runQaGate,
+  shouldEnforceQaGate,
+  formatQaHandoffSummary,
+} = require('./qa-gate');
+const {
+  buildSwarmObservability,
+  extractTaskHandoffs,
+  appendHandoffLog,
+  readHandoffLog,
+} = require('./observability');
+const {
+  exportSwarmforgeBundle,
+  renderSwarmforgeConf,
+} = require('./swarmforge-export');
+const {
+  listBackends,
+  listRoleBackends,
+  backendForRole,
+  governanceNote,
+  renderBackendsMarkdown,
+} = require('./backends');
 
 function createServerDeps(server) {
   return {
@@ -43,4 +84,42 @@ module.exports = {
   formatHandoffLine,
   formatEvidenceLine,
   createServerDeps,
+  listPacks,
+  getPack,
+  suggestPack,
+  recommendPackPolicy,
+  modelHintForPack,
+  modelHintFromTier,
+  buildTaskBrief,
+  extractAcceptanceCriteria,
+  extractPaths,
+  ensureRoleWorktree,
+  listRoleWorktrees,
+  WORKTREE_ROOT,
+  applyCloseoutToTaskSource,
+  appendLedgerHistorial,
+  formatLedgerCheckpoint,
+  checkpointLedger,
+  markAcceptanceCriteriaDone,
+  packRequiresSpecifier,
+  hasApprovableAcceptanceCriteria,
+  assertSpecifierBeforeCoder,
+  resolveStartingRole,
+  applySpecifierAcceptance,
+  hasSpecifierToCoderHandoff,
+  packRequiresQa,
+  runQaGate,
+  shouldEnforceQaGate,
+  formatQaHandoffSummary,
+  buildSwarmObservability,
+  extractTaskHandoffs,
+  appendHandoffLog,
+  readHandoffLog,
+  exportSwarmforgeBundle,
+  renderSwarmforgeConf,
+  listBackends,
+  listRoleBackends,
+  backendForRole,
+  governanceNote,
+  renderBackendsMarkdown,
 };

@@ -173,12 +173,21 @@ async function runFullLifecycle(base, slug, tasksDir, taskCode) {
   assert.equal(resumeDoing.response.status, 200, resumeDoing.payload.error);
   assert.equal(resumeDoing.payload.status, 'In Progress');
 
-  const done = await postJson(`${base}/api/tasks/status?project=${encodeURIComponent(slug)}`, {
+  const missingEvidence = await postJson(`${base}/api/tasks/status?project=${encodeURIComponent(slug)}`, {
     id: taskId,
     status: 'Done',
   });
+  assert.equal(missingEvidence.response.status, 409, 'Done without evidence must be rejected');
+  assert.equal(missingEvidence.payload.code, 'MISSING_EVIDENCE');
+
+  const done = await postJson(`${base}/api/tasks/status?project=${encodeURIComponent(slug)}`, {
+    id: taskId,
+    status: 'Done',
+    evidence: `lifecycle proof ${slug}`,
+  });
   assert.equal(done.response.status, 200, done.payload.error);
   assert.equal(done.payload.status, 'Done');
+  assert.match(fs.readFileSync(filePath, 'utf8'), /## Evidence/);
 
   const onDisk = parseTask(filePath);
   assert.equal(onDisk.status, 'Done');

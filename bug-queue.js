@@ -47,6 +47,7 @@ function buildBugRunInstruction(task, project) {
     `Ruta: ${project.path}`,
   ];
   if (task.file) lines.push(`Backlog: backlog/${task.file}`);
+  lines.push('', `Swarm: npm run swarm -- run --project ${project.slug} --task ${task.id}`);
   return lines.join('\n');
 }
 
@@ -58,6 +59,43 @@ function bugRunPacket(task, project) {
     status: task.status,
     priority: task.priority,
     file: task.file,
+    lane: 'bugs',
+    project: project.slug,
+    projectPath: project.path,
+    instruction,
+    claimedAt: new Date().toISOString(),
+  };
+}
+
+function improvementQueueState(tasks, isImprovementTask) {
+  return laneQueueState(tasks, isImprovementTask);
+}
+
+function buildImprovementRunInstruction(task, project) {
+  const lines = [
+    `Atiende ${task.id}: ${task.title}`,
+    '',
+    'Implementa la mejora en el repositorio del proyecto, prueba los cambios y documenta evidencia (## Evidence / ## Closeout).',
+    'Solo si no hay bugs abiertos con mayor prioridad. Audita con Pharos antes de Done.',
+    'Al terminar: marca Done con evidencia (`npm run queue:complete -- <project> <id> "<evidencia>"`).',
+    '',
+    `Proyecto: ${project.name} (${project.slug})`,
+    `Ruta: ${project.path}`,
+  ];
+  if (task.file) lines.push(`Backlog: backlog/${task.file}`);
+  lines.push('', `Swarm: npm run swarm -- run --project ${project.slug} --task ${task.id}`);
+  return lines.join('\n');
+}
+
+function improvementRunPacket(task, project) {
+  const instruction = buildImprovementRunInstruction(task, project);
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    file: task.file,
+    lane: 'mejoras',
     project: project.slug,
     projectPath: project.path,
     instruction,
@@ -73,4 +111,7 @@ module.exports = {
   bugQueueState,
   buildBugRunInstruction,
   bugRunPacket,
+  improvementQueueState,
+  buildImprovementRunInstruction,
+  improvementRunPacket,
 };

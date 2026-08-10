@@ -31,6 +31,110 @@ main { max-width: 1180px; margin: auto; padding: 40px 24px 64px; }
   margin-bottom: 28px;
 }
 
+.hoy-panel {
+  margin: 0 0 28px;
+  padding: 18px;
+  border: 1px solid #56468b88;
+  border-radius: 18px;
+  background: linear-gradient(165deg, #241d3c 0%, #171f36 70%);
+  box-shadow: 0 12px 34px #10082755;
+}
+
+.hoy-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.hoy-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.hoy-body {
+  display: grid;
+  gap: 12px;
+}
+
+.hoy-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #6956a766;
+  background: #12182aee;
+}
+
+.hoy-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.hoy-card-top h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.hoy-pill {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #6d4bd233;
+  color: #ddd6fe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hoy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hoy-label {
+  margin: 0 0 6px;
+  color: #b8a7ef;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.hoy-grid ul {
+  margin: 0;
+  padding-left: 16px;
+  color: #e8e4ff;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hoy-grid .muted,
+.hoy-empty {
+  color: var(--muted);
+}
+
+.hoy-next {
+  margin: 0;
+  color: #f5f5f7;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.hoy-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 820px) {
+  .hoy-grid { grid-template-columns: 1fr; }
+  .hoy-actions { grid-template-columns: 1fr; }
+}
+
 .eyebrow {
   margin: 0 0 6px;
   color: var(--muted);
@@ -285,6 +389,8 @@ h1 {
 
 .card-actions {
   margin-top: 12px;
+  display: grid;
+  gap: 8px;
 }
 
 .btn-gantt {
@@ -302,6 +408,29 @@ h1 {
 .btn-gantt:hover {
   border-color: #5de7bcaa;
   color: #d7fff2;
+}
+
+.btn-swarm {
+  width: 100%;
+  border: 1px solid #8b7cf666;
+  background: linear-gradient(120deg, #241d3c, #2a2450);
+  color: #ddd6fe;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-swarm.secondary {
+  background: #ffffff10;
+  border-color: #ffffff22;
+  color: #e8e4ff;
+}
+
+.btn-swarm:hover {
+  border-color: #c4b5fd;
+  color: #fff;
 }
 
 .btn-primary, .btn-secondary {

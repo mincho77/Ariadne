@@ -610,16 +610,28 @@ npm run task:normalize -- --all --apply
 
 | Plist | Label | Proceso |
 |-------|-------|---------|
-| `com.ariadne.hub.plist` | `com.ariadne.hub` | `node server.js` |
-| `com.ariadne.bug-queue.jurismate.plist` | `com.ariadne.bug-queue.jurismate` | `node scripts/bug-queue-runner.js jurismate` |
+| `com.ariadne.hub.plist` (generado) | `com.ariadne.hub` | `node server.js` — **único Hub** |
+| `com.ariadne.bug-queue.jurismate.plist` | `com.ariadne.bug-queue.jurismate` | runner bugs (opcional) |
+| ~~`com.jurismate.ariadne-hub`~~ | retirado | conflicto de puertos — bootout obligatorio |
 
-**Instalación:**
+Guía: [`docs/launchagent-hub.md`](launchagent-hub.md).
+
+**Instalación Hub (recomendado):**
 
 ```bash
-cp com.ariadne.hub.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ariadne.hub.plist
-launchctl kickstart -k gui/$(id -u)/com.ariadne.hub
+npm run hub:launchagent
+```
 
+**Bootout del Hub legado:**
+
+```bash
+launchctl bootout gui/$(id -u)/com.jurismate.ariadne-hub 2>/dev/null || true
+rm -f ~/Library/LaunchAgents/com.jurismate.ariadne-hub.plist
+```
+
+**Cola de bugs (opcional):**
+
+```bash
 cp com.ariadne.bug-queue.jurismate.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ariadne.bug-queue.jurismate.plist
 launchctl kickstart -k gui/$(id -u)/com.ariadne.bug-queue.jurismate
@@ -635,6 +647,8 @@ launchctl kickstart -k gui/$(id -u)/com.ariadne.bug-queue.jurismate
 ```bash
 launchctl kickstart -k gui/$(id -u)/com.ariadne.hub
 ```
+
+Con el Hub activo, Gantt vive en el mismo proceso (`/api/gantt/portfolio`, `/portfolio.html`).
 
 ### 10.2 Variables de entorno
 

@@ -174,6 +174,8 @@ test('queue board exposes ordered queue and drag targets for every status', () =
   assert.match(html, /draggable="true"/);
   for (const status of ['To Do', 'Queued', 'In Progress', 'Done']) assert.match(html, new RegExp(`data-column="${status}"`));
   assert.match(html, /addEventListener\('drop'/);
+  assert.match(html, /assertClientDoneEvidence/);
+  assert.match(html, /Falta ## Evidence o ## Closeout/);
 });
 test('queue board search really hides cards and updates column state', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-board-search-'));

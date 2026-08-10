@@ -21,7 +21,7 @@ const {
 const { boardColumns, STATUS_DISPLAY } = require('./board-columns');
 const { createTaskFile, projectTaskCode, formatTaskId, parseTypedTaskId } = require('./task-ids');
 const { normalizeProjectTaskIds } = require('./task-id-normalize');
-const { bugQueueState, bugRunPacket, buildBugRunInstruction } = require('./bug-queue');
+const { bugQueueState, bugRunPacket, buildBugRunInstruction, improvementQueueState, improvementRunPacket, buildImprovementRunInstruction } = require('./bug-queue');
 const {
   isTaskDeletable,
   boardDeleteButton,
@@ -49,6 +49,9 @@ const {
   boardTaskDetailStyles,
   boardTaskDetailInitScript,
 } = require('./board-task-detail');
+const { computeSwarmStatus, runSwarmTask, createServerDeps, buildSwarmObservability } = require('./swarm');
+const { buildHoySnapshot } = require('./hub-hoy');
+const { checkpointLedgerFile } = require('./lib/ledger-checkpoint');
 const {
   splitTaskDocument,
   getFrontmatterField,
@@ -71,6 +74,9 @@ const {
 } = require('./lib/gantt');
 const { evaluateDependencyGate, assertCanStartWork, normalizeGatePolicy } = require('./lib/dependency-gate');
 const { taskDependencyGateStyles, taskDependencyGateHtml } = require('./board-dependency-gate');
+const { assertDoneEvidenceAllowed, boardDoneGateScript } = require('./done-gate');
+const { appendEvidence } = require('./swarm/evidence');
+const { listAcTemplates } = require('./lib/ac-templates');
 const {
   normalizeAiOperators,
   effectiveCapacityFromConfig,
@@ -809,7 +815,17 @@ async function ensureTaskQueued(project, task) {
 
 async function applyQueueOrdinals(project, orderedIds) {
   for (let i = 0; i < orderedIds.length; i += 1) {
-    await runBacklog(project, ['task', 'edit', orderedIds[i], '--ordinal', String((i + 1) * 10), '--plain']);
+    const ordinal = String((i + 1) * 10);
+    try {
+      await runBacklog(project, ['task', 'edit', orderedIds[i], '--ordinal', ordinal, '--plain']);
+    } catch (error) {
+      const task = findTask(project, orderedIds[i]);
+      if (!task) throw error;
+      const filePath = resolveTaskFilePath(project, task);
+      let next = upsertFrontmatterScalar(task.source, 'ordinal', ordinal);
+      next = touchUpdatedDate(next);
+      fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+    }
   }
 }
 
@@ -841,13 +857,26 @@ function dependencyGateForTask(task, tasks) {
   return evaluateDependencyGate(task, tasks, { policy: DEPENDENCY_GATE_POLICY });
 }
 
-async function updateTaskStatus(project, taskId, status) {
+async function updateTaskStatus(project, taskId, status, options = {}) {
   const allowed = new Set(['To Do', 'Queued', 'In Progress', 'Done']);
   if (!allowed.has(status)) throw new Error('estado de tarea inválido');
-  const task = findTask(project, taskId);
+  let task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
   if (status === 'In Progress') {
     assertCanStartWork(task, projectTasks(project), { policy: DEPENDENCY_GATE_POLICY });
+  }
+  if (status === 'Done') {
+    const evidence = String(options.evidence || '').trim();
+    if (evidence) {
+      const filePath = resolveTaskFilePath(project, task);
+      const next = appendEvidence(fs.readFileSync(filePath, 'utf8'), {
+        evidence,
+        notes: options.notes,
+      });
+      fs.writeFileSync(filePath, next.endsWith('\n') ? next : `${next}\n`, 'utf8');
+      task = findTask(project, taskId) || { ...task, source: next };
+    }
+    assertDoneEvidenceAllowed(task, { force: options.force === true });
   }
   const wasQueued = task.status.toLowerCase() === 'queued';
   if (status === 'Queued') {
@@ -999,7 +1028,12 @@ function createTask(project, options = {}) {
     findTask,
   });
   const parsed = parseTask(created.path);
-  return { ...parsed, file: created.file, source: created.source };
+  return {
+    ...parsed,
+    file: created.file,
+    source: created.source,
+    acTemplate: created.acTemplate || null,
+  };
 }
 
 function getBugQueueSnapshot(project) {
@@ -1031,11 +1065,75 @@ function getBugQueueSnapshot(project) {
   };
 }
 
+function getImprovementQueueSnapshot(project) {
+  const state = improvementQueueState(projectTasks(project), isImprovementTask);
+  return {
+    project: project.slug,
+    lane: 'mejoras',
+    queueLength: state.queueLength,
+    active: state.active ? {
+      id: state.active.id,
+      title: state.active.title,
+      status: state.active.status,
+      priority: state.active.priority,
+      file: state.active.file,
+    } : null,
+    next: state.next ? {
+      id: state.next.id,
+      title: state.next.title,
+      status: state.next.status,
+      priority: state.next.priority,
+      file: state.next.file,
+      instruction: buildImprovementRunInstruction(state.next, project),
+    } : null,
+    queued: state.queued.map((task) => ({
+      id: task.id,
+      title: task.title,
+      priority: task.priority,
+      ordinal: task.ordinal,
+    })),
+  };
+}
+
 async function enqueueTask(project, taskId) {
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
   if (task.status.toLowerCase() === 'queued') return task;
   return updateTaskStatus(project, task.id, 'Queued');
+}
+
+/**
+ * Authorize a task onto Queue from Gantt (status Queued + ordinal order).
+ * options.position: 'end' | 'head'
+ * options.ordinal: preferred slot (normalized to (index+1)*10 after reorder)
+ */
+async function authorizeTaskToQueue(project, taskId, options = {}) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+  if (/^done$/i.test(task.status)) {
+    const error = new Error('no se puede autorizar a Queue una tarea Done');
+    error.code = 'DONE_TASK';
+    throw error;
+  }
+
+  const { insertTaskInQueueOrder } = require('./lib/gantt/queue-authorize');
+  await enqueueTask(project, task.id);
+
+  const queued = sortQueuedTasks(
+    projectTasks(project).filter((item) => item.status.toLowerCase() === 'queued'),
+  );
+  const order = insertTaskInQueueOrder(
+    queued.map((item) => item.id),
+    task.id,
+    options,
+  );
+  const queueOrder = await updateQueueOrder(project, order);
+  const refreshed = findTask(project, task.id);
+  return {
+    ...refreshed,
+    queueOrder,
+    authorized: true,
+  };
 }
 
 async function createBugTask(project, options = {}) {
@@ -1090,12 +1188,62 @@ async function claimNextBug(project) {
 }
 
 function writeBugRunPacket(project, packet) {
-  const dir = path.join(project.path, '.ariadne', 'bug-queue');
+  return writeLaneRunPacket(project, packet, 'bug-queue');
+}
+
+function writeImprovementRunPacket(project, packet) {
+  return writeLaneRunPacket(project, packet, 'mejoras-queue');
+}
+
+function writeLaneRunPacket(project, packet, laneDir) {
+  const dir = path.join(project.path, '.ariadne', laneDir);
   fs.mkdirSync(dir, { recursive: true });
   const target = path.join(dir, 'current.json');
   fs.writeFileSync(target, `${JSON.stringify(packet, null, 2)}\n`, 'utf8');
   fs.writeFileSync(path.join(dir, 'current.md'), `${packet.instruction}\n`, 'utf8');
+
+  const shared = path.join(project.path, '.ariadne', 'run-packets');
+  fs.mkdirSync(shared, { recursive: true });
+  fs.writeFileSync(path.join(shared, `${packet.id}.json`), `${JSON.stringify(packet, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(path.join(shared, `${packet.id}.md`), `${packet.instruction}\n`, 'utf8');
+  fs.writeFileSync(path.join(shared, 'latest.json'), `${JSON.stringify(packet, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(path.join(shared, 'latest.md'), `${packet.instruction}\n`, 'utf8');
   return target;
+}
+
+async function claimNextImprovement(project) {
+  const state = improvementQueueState(projectTasks(project), isImprovementTask);
+  if (state.active) {
+    const err = new Error('ya hay una mejora en ejecución');
+    err.code = 'ACTIVE_IMPROVEMENT';
+    err.active = state.active;
+    throw err;
+  }
+  if (!state.next) {
+    const err = new Error('la cola de mejoras está vacía');
+    err.code = 'EMPTY_QUEUE';
+    throw err;
+  }
+  await updateTaskStatus(project, state.next.id, 'In Progress');
+  const task = findTask(project, state.next.id);
+  return improvementRunPacket(task, project);
+}
+
+function buildRunPacketForTask(project, taskId) {
+  const task = findTask(project, taskId);
+  if (!task) throw new Error('tarea no encontrada');
+  const status = String(task.status || '').toLowerCase();
+  if (!['queued', 'in progress', 'to do'].includes(status)) {
+    throw new Error('solo se generan packets para To Do, Queued o In Progress');
+  }
+  if (isBugTask(task)) {
+    const packet = bugRunPacket(task, project);
+    const runFile = writeBugRunPacket(project, packet);
+    return { ...packet, runFile };
+  }
+  const packet = improvementRunPacket(task, project);
+  const runFile = writeImprovementRunPacket(project, packet);
+  return { ...packet, runFile };
 }
 
 function ensureProjectTaskIds(project) {
@@ -1305,7 +1453,8 @@ function openTask(task){
   modal.classList.add('open');
 }
 function filterTasks(){const query=search.value.trim().toLowerCase();let visible=0;cards.forEach((card)=>{const match=!query||card.dataset.search.includes(query);card.hidden=!match;card.classList.toggle('search-match',!!query&&match);if(match)visible+=1});columns.forEach((column)=>{const count=[...column.querySelectorAll('.task')].filter((card)=>!card.hidden).length;const countEl=column.querySelector('.column-count');if(countEl)countEl.textContent=count;column.classList.toggle('search-no-results',!!query&&count===0)});searchCount.textContent=query?visible+' resultado'+(visible===1?'':'s'):''}
-async function moveTask(taskId,nextStatus){actionError.textContent='';const response=await fetch('/api/tasks/status?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:taskId,status:nextStatus})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo mover la tarea');location.reload()}
+${boardDoneGateScript()}
+async function moveTask(taskId,nextStatus){actionError.textContent='';assertClientDoneEvidence(taskId,nextStatus);const response=await fetch('/api/tasks/status?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:taskId,status:nextStatus})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo mover la tarea');location.reload()}
 async function saveQueueOrder(order){actionError.textContent='';const response=await fetch('/api/tasks/queue-order?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({order})});const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo reordenar la cola');location.reload()}
 function queueCards(queueList){return [...queueList.querySelectorAll('.task:not([hidden])')]}
 function getDragAfterElement(container,y){const elements=[...container.querySelectorAll('.task:not(.dragging):not([hidden])')];return elements.reduce((closest,child)=>{const box=child.getBoundingClientRect();const offset=y-box.top-box.height/2;if(offset<0&&offset>closest.offset)return{offset,element:child};return closest},{offset:Number.NEGATIVE_INFINITY,element:null}).element}
@@ -1339,6 +1488,42 @@ async function handle(req, res) {
   }
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   if (req.method === 'GET' && url.pathname === '/api/projects') return json(res, 200, readCatalog().map(summarize));
+  if (req.method === 'GET' && url.pathname === '/api/hoy') {
+    try {
+      const snapshot = buildHoySnapshot(readCatalog(), {
+        projectTasks,
+        buildProjectGanttMetrics,
+      }, {
+        project: url.searchParams.get('project') || '',
+      });
+      return json(res, 200, snapshot);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/checkpoint') {
+    try {
+      const data = await body(req).catch(() => ({}));
+      const ledgerRel = String(data.ledger || 'docs/plans/ariadne-e2e.md');
+      const ledgerPath = path.resolve(__dirname, ledgerRel);
+      if (!ledgerPath.startsWith(__dirname) || !fs.existsSync(ledgerPath)) {
+        return json(res, 404, { error: 'ledger not found' });
+      }
+      const report = checkpointLedgerFile(ledgerPath, {
+        backlogRoot: __dirname,
+        dryRun: data.dryRun === true,
+      });
+      return json(res, 200, {
+        ok: true,
+        ledger: path.relative(__dirname, report.ledger),
+        written: report.written,
+        suggestedNext: report.suggestedNext,
+        changes: report.changes,
+      });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (req.method === 'GET' && url.pathname === '/api/hub-config') {
     const hubApiBase = `http://${HOST}:${PORT}`;
     const sampleSlug = readCatalog()[0]?.slug || 'ariadne';
@@ -1371,6 +1556,48 @@ async function handle(req, res) {
       return json(res, 200, portfolio);
     } catch (error) {
       return json(res, 400, { error: error.message });
+    }
+  }
+  const swarmStatus = url.pathname.match(/^\/api\/projects\/([^/]+)\/swarm\/status$/);
+  if (req.method === 'GET' && swarmStatus) {
+    const project = readCatalog().find((item) => item.slug === swarmStatus[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    const detailed = url.searchParams.get('detail') !== '0';
+    if (detailed) {
+      return json(res, 200, buildSwarmObservability(project, projectTasks(project)));
+    }
+    return json(res, 200, {
+      project: project.slug,
+      ...computeSwarmStatus(projectTasks(project)),
+    });
+  }
+  const swarmObserve = url.pathname.match(/^\/api\/projects\/([^/]+)\/swarm\/observe$/);
+  if (req.method === 'GET' && swarmObserve) {
+    const project = readCatalog().find((item) => item.slug === swarmObserve[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    return json(res, 200, buildSwarmObservability(project, projectTasks(project)));
+  }
+  const swarmRun = url.pathname.match(/^\/api\/projects\/([^/]+)\/swarm\/run$/);
+  if (req.method === 'POST' && swarmRun) {
+    const project = readCatalog().find((item) => item.slug === swarmRun[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const deps = createServerDeps(module.exports);
+      const result = await runSwarmTask(project, {
+        taskId: data?.taskId || data?.id || null,
+        role: data?.role || null,
+      }, deps);
+      return json(res, 200, { project: project.slug, ...result });
+    } catch (error) {
+      const status = error.code === 'QUEUE_EMPTY' ? 404
+        : (error.code === 'FS_BLOCKED' || error.code === 'NOT_QUEUED') ? 409
+          : 400;
+      return json(res, status, {
+        error: error.message,
+        code: error.code || null,
+        blockers: error.blockers || undefined,
+      });
     }
   }
   const gantt = url.pathname.match(/^\/api\/projects\/([^/]+)\/gantt$/);
@@ -1597,6 +1824,22 @@ async function handle(req, res) {
       return json(res, statusCode, { error: error.message });
     }
   }
+  const queueAuthorize = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/([^/]+)\/queue$/);
+  if (req.method === 'POST' && queueAuthorize) {
+    const project = readCatalog().find((item) => item.slug === queueAuthorize[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req).catch(() => ({}));
+      const updated = await authorizeTaskToQueue(project, decodeURIComponent(queueAuthorize[2]), {
+        position: data?.position,
+        ordinal: data?.ordinal,
+      });
+      return json(res, 200, updated);
+    } catch (error) {
+      const statusCode = error.code === 'DONE_TASK' ? 409 : 400;
+      return json(res, statusCode, { error: error.message, code: error.code || undefined });
+    }
+  }
   const taskDependencies = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/dependencies$/);
   if (req.method === 'POST' && taskDependencies) {
     const project = readCatalog().find((item) => item.slug === taskDependencies[1]);
@@ -1643,10 +1886,15 @@ async function handleBoard(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/tasks/status') {
     try {
       const data = await body(req);
-      const updated = await updateTaskStatus(project, data.id, data.status);
+      const updated = await updateTaskStatus(project, data.id, data.status, {
+        evidence: data.evidence,
+        notes: data.notes,
+        force: data.force === true,
+      });
       return json(res, 200, updated);
     } catch (error) {
-      return json(res, 400, { error: error.message });
+      const statusCode = error.code === 'MISSING_EVIDENCE' ? 409 : 400;
+      return json(res, statusCode, { error: error.message, code: error.code || undefined });
     }
   }
   if (req.method === 'POST' && url.pathname === '/api/tasks/content') {
@@ -1684,6 +1932,9 @@ async function handleBoard(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/queue/bugs') {
     return json(res, 200, getBugQueueSnapshot(project));
   }
+  if (req.method === 'GET' && url.pathname === '/api/queue/mejoras') {
+    return json(res, 200, getImprovementQueueSnapshot(project));
+  }
   if (req.method === 'POST' && url.pathname === '/api/queue/bugs/claim') {
     try {
       const packet = await claimNextBug(project);
@@ -1698,6 +1949,33 @@ async function handleBoard(req, res) {
       }
       return json(res, 400, { error: error.message });
     }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/queue/mejoras/claim') {
+    try {
+      const packet = await claimNextImprovement(project);
+      const runFile = writeImprovementRunPacket(project, packet);
+      return json(res, 200, { ...packet, runFile });
+    } catch (error) {
+      if (error.code === 'ACTIVE_IMPROVEMENT') {
+        return json(res, 409, { error: error.message, active: error.active });
+      }
+      if (error.code === 'EMPTY_QUEUE') {
+        return json(res, 404, { error: error.message });
+      }
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/queue/packet') {
+    try {
+      const data = await body(req);
+      const packet = buildRunPacketForTask(project, data.id);
+      return json(res, 200, packet);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/tasks/ac-templates') {
+    return json(res, 200, { templates: listAcTemplates() });
   }
   if (req.method === 'POST' && url.pathname === '/api/tasks/create') {
     try {
@@ -1793,4 +2071,4 @@ if (require.main === module) {
   if (BOARD_PORT !== PORT) http.createServer((req, res) => handleBoard(req, res).catch((error) => json(res, 500, { error: error.message }))).listen(BOARD_PORT, HOST, () => console.log(`Ariadne Kanban: http://${HOST}:${BOARD_PORT}`));
 }
 
-module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, buildProjectGanttMetrics, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, getBugQueueSnapshot, claimNextBug, writeBugRunPacket, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask, createProjectBaseline, compareProjectBaseline, listBaselines, readBaselineFile };
+module.exports = { parseTask, priorityRank, sortTasksByPriority, sortQueuedTasks, nextQueuedTask, pickNextBug, pickNextImprovement, summarize, buildProjectGanttMetrics, slugify, taskDetail, taskDetailHtml, queueBoardPage, validateTaskSource, touchUpdatedDate, updateTaskSource, updateTaskSubstatus, updateTaskChecklist, updateTaskDependencies, createTask, createBugTask, enqueueTask, authorizeTaskToQueue, getBugQueueSnapshot, getImprovementQueueSnapshot, claimNextBug, claimNextImprovement, writeBugRunPacket, writeImprovementRunPacket, buildRunPacketForTask, deleteTask, ensureProjectTaskIds, findTask, resolveTaskFilePath, projectTasks, updateQueueOrder, isBugTask, buildBugStats, bugsBoardPage, projectTaskCode, formatTaskId, parseTypedTaskId, normalizeProjectTaskIds, bugQueueState, buildBugRunInstruction, buildProjectGantt, importImprovements, patchProjectTask, applyKanbanTemporalSync, applyTaskStateFallback, updateTaskStatus, computeSourceHash, evaluateDependencyGate, dependencyGateForTask, createProjectBaseline, compareProjectBaseline, listBaselines, readBaselineFile, buildHoySnapshot };

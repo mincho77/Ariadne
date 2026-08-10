@@ -9,6 +9,17 @@ Minimal governance for **read/write/update** on Markdown backlogs and plan ledge
 
 Full rules and deployment gates: `skills/ariadne/SKILL.md` and `docs/ariadne-lite.md`.
 
+## How you got here (routing)
+
+Prefer this skill when the launcher/route-hint says `lite`:
+
+```bash
+npm run ariadne:route-hint -- "mueve AH-E-39 a cola"
+# → {"mode":"lite","skill":"ariadne-lite","modelTier":"economy",...}
+```
+
+Cursor surfaces the same policy via `.cursor/rules/ariadne-route.mdc`. If the request is deploy/Pharos/Gantt/refactor, switch to full `ariadne`.
+
 ## Use this skill when
 
 - Create, move, or close a Backlog task (Hub/Kanban/CLI)

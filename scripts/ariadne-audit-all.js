@@ -9,6 +9,7 @@ const ROOT = path.join(__dirname, '..');
 const CHECK_PLAN = path.join(ROOT, 'skills', 'ariadne', 'scripts', 'check_plan.py');
 const GANTT_AUDIT = path.join(ROOT, 'scripts', 'gantt-backlog-audit.js');
 const { auditLedgerFile, fixLedgerFile } = require('../lib/ledger-hygiene');
+const { auditLedgerBacklogDrift } = require('../lib/ledger-backlog-drift');
 
 function usage() {
   console.error(`Usage:
@@ -16,9 +17,10 @@ function usage() {
 
 Runs check_plan.py on every docs/plans/*.md ledger.
 Detects stale "Próxima acción" cells pointing at hecho/cancelado IDs.
+Detects ledger↔Kanban drift: open plan rows that cite AH-E-* / JM-B-* without a backlog card.
 With --fix, rewrites those cells to "—" (dry-run otherwise reports only).
 If projects.json exists, also runs gantt-backlog-audit.js --all --json.
-Exit code 1 when any ledger errors or gantt issues exist.
+Exit code 1 when any ledger errors, drift, or gantt issues exist.
 `);
   process.exit(1);
 }
@@ -109,6 +111,7 @@ if (applyFix) {
     fixLedgerFile(ledgerPath, { dryRun: false });
   }
 }
+const drift = ledgerPaths.map((ledgerPath) => auditLedgerBacklogDrift(ledgerPath, { backlogRoot: ROOT }));
 const ledgers = ledgerPaths.map(runCheckPlan);
 const gantt = runGanttAudit();
 const projects = summarizeProjects();
@@ -116,8 +119,12 @@ const projects = summarizeProjects();
 const ledgerErrors = ledgers.reduce((sum, row) => sum + row.errors, 0);
 const ledgerFailed = ledgers.filter((row) => !row.ok).length;
 const hygieneIssues = hygiene.reduce((sum, row) => sum + row.issues.length, 0);
+const driftIssues = drift.reduce(
+  (sum, row) => sum + row.issues.filter((issue) => issue.severity === 'error').length,
+  0,
+);
 const ganttIssues = gantt.skipped ? 0 : (gantt.totalIssues || 0);
-const totalProblems = ledgerErrors + ganttIssues + (applyFix ? 0 : hygieneIssues);
+const totalProblems = ledgerErrors + ganttIssues + driftIssues + (applyFix ? 0 : hygieneIssues);
 
 const report = {
   auditedAt: new Date().toISOString(),
@@ -134,6 +141,12 @@ const report = {
     ok: row.ok,
   })),
   hygieneSummary: { issues: hygieneIssues, fixed: applyFix ? hygieneIssues : 0 },
+  drift: drift.map((row) => ({
+    ledger: path.relative(ROOT, row.ledger),
+    ok: row.ok,
+    issues: row.issues,
+  })),
+  driftSummary: { errors: driftIssues },
   projects,
   gantt,
   ok: totalProblems === 0 && ledgerFailed === 0,
@@ -154,6 +167,15 @@ if (jsonOut) {
       for (const issue of row.issues) {
         const action = applyFix ? 'fixed' : 'stale';
         console.log(`  [${action.toUpperCase()}] ${row.ledger} ${issue.taskId}: "${issue.refId}" (${issue.refState}) → ${issue.suggested}`);
+      }
+    }
+  }
+  const drifted = report.drift.filter((row) => row.issues.length);
+  if (drifted.length) {
+    console.log('\nLedger↔Kanban drift (plan no puede inventar trabajo ausente del board):');
+    for (const row of drifted) {
+      for (const issue of row.issues) {
+        console.log(`  [${issue.severity.toUpperCase()}] ${row.ledger}: ${issue.message}`);
       }
     }
   }

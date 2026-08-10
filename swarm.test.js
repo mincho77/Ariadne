@@ -250,3 +250,341 @@ test('createServerDeps run/complete against sandbox project', async () => {
   assert.match(file, /Swarm handoffs/);
   assert.match(file, /## Evidence/);
 });
+
+const { listPacks, getPack, suggestPack, buildTaskBrief } = require('./swarm');
+
+test('listPacks exposes two four six with roles', () => {
+  const packs = listPacks();
+  assert.equal(packs.length, 3);
+  assert.deepEqual(getPack('four').roles, ['specifier', 'coder', 'cleaner', 'architect']);
+  assert.equal(getPack('six').roles.includes('qa'), true);
+});
+
+test('suggestPack maps bug→two ultra→six high→four', () => {
+  assert.equal(suggestPack({ type: 'bug', priority: 'Medium' }).id, 'two');
+  assert.equal(suggestPack({ priority: 'Ultra High' }).id, 'six');
+  assert.equal(suggestPack({ priority: 'High' }).id, 'four');
+});
+
+test('recommendPackPolicy exposes modelHint cheap/strong', () => {
+  const { recommendPackPolicy } = require('./swarm');
+  const bug = recommendPackPolicy({ type: 'bug', title: 'fix login' });
+  assert.equal(bug.pack.id, 'two');
+  assert.equal(bug.modelHint, 'cheap');
+
+  const mejoraHigh = recommendPackPolicy({ type: 'enhancement', priority: 'High', title: 'Mejora ranking' });
+  assert.equal(mejoraHigh.pack.id, 'four');
+  assert.equal(mejoraHigh.modelHint, 'strong');
+
+  const mvp = recommendPackPolicy({ type: 'feature', priority: 'Medium', title: 'MVP onboarding' });
+  assert.equal(mvp.pack.id, 'six');
+  assert.equal(mvp.modelHint, 'strong');
+});
+
+test('buildTaskBrief includes AC deps paths and role prompts', () => {
+  const task = {
+    id: 'FX-E-9',
+    title: 'Packs',
+    status: 'Queued',
+    priority: 'High',
+    source: `---
+id: FX-E-9
+title: Packs
+status: Queued
+priority: High
+dependencies:
+  - FX-E-1
+---
+
+## Description
+
+Implementar en \`swarm/packs.js\` y \`docs/swarm/prompts.md\`.
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 Packs two/four/six disponibles
+- [x] #2 Brief por tarea incluye AC deps y paths
+<!-- AC:END -->
+`,
+  };
+  const brief = buildTaskBrief(task, { pack: 'four' });
+  assert.equal(brief.pack.id, 'four');
+  assert.equal(brief.acceptance.length, 2);
+  assert.equal(brief.acceptance[1].done, true);
+  assert.deepEqual(brief.dependencies, ['FX-E-1']);
+  assert.ok(brief.paths.includes('swarm/packs.js'));
+  assert.match(brief.markdown, /## Role prompts/);
+  assert.match(brief.markdown, /### specifier/);
+  assert.match(brief.markdown, /criterios binarios/i);
+});
+
+test('ensureRoleWorktree creates and reuses git worktree', () => {
+  const { ensureRoleWorktree, listRoleWorktrees, WORKTREE_ROOT } = require('./swarm/worktrees');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-wt-'));
+  const { spawnSync } = require('node:child_process');
+  const run = (args) => {
+    const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' },
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  };
+  run(['init']);
+  run(['config', 'user.email', 'test@example.com']);
+  run(['config', 'user.name', 'Test']);
+  fs.writeFileSync(path.join(root, 'README.md'), 'wt\n');
+  run(['add', 'README.md']);
+  run(['commit', '-m', 'init']);
+
+  const first = ensureRoleWorktree(root, { taskId: 'FX-E-1', role: 'coder' });
+  assert.equal(first.action, 'created');
+  assert.ok(fs.existsSync(first.path));
+  assert.match(first.relativePath, new RegExp(`^${WORKTREE_ROOT}/`));
+
+  const second = ensureRoleWorktree(root, { taskId: 'FX-E-1', role: 'coder' });
+  assert.equal(second.action, 'reuse');
+  assert.equal(listRoleWorktrees(root).length, 1);
+});
+
+test('applyCloseoutToTaskSource marks AC and adds Closeout block', () => {
+  const { applyCloseoutToTaskSource, appendLedgerHistorial, formatLedgerCheckpoint } = require('./swarm');
+  const source = `---
+id: FX-E-8
+status: In Progress
+---
+
+## Acceptance Criteria
+- [ ] #1 One
+- [ ] #2 Two
+
+## Description
+ok
+`;
+  const next = applyCloseoutToTaskSource(source, {
+    evidence: 'npm test ok',
+    notes: 'AH-E-34',
+    command: 'npm test',
+    at: '2026-08-09 12:00:00',
+  });
+  assert.match(next, /- \[x\] #1 One/);
+  assert.match(next, /- \[x\] #2 Two/);
+  assert.match(next, /## Evidence/);
+  assert.match(next, /## Closeout/);
+  assert.match(next, /proof: npm test ok/);
+
+  const ledger = appendLedgerHistorial('# Plan\n\n## Historial\n\n- old\n', formatLedgerCheckpoint({
+    taskId: 'FX-E-8',
+    title: 'Close',
+    evidence: 'npm test ok',
+    at: '2026-08-09 12:00:00',
+  }));
+  assert.match(ledger, /FX-E-8 \(Close\) Done/);
+});
+
+test('completeSwarmTask checkpoints ledger when enabled', async () => {
+  const { completeSwarmTask } = require('./swarm');
+  const store = {
+    tasks: [{
+      id: 'FX-E-8',
+      title: 'Close',
+      status: 'In Progress',
+      source: '---\nid: FX-E-8\ntitle: Close\nstatus: In Progress\n---\n\n## Acceptance Criteria\n- [ ] #1 Done me\n',
+    }],
+  };
+  let ledgerPayload = null;
+  const deps = {
+    listTasks: () => store.tasks,
+    setStatus: async (_p, taskId, status) => {
+      const task = store.tasks[0];
+      task.status = status;
+      task.source = task.source.replace(/^status:\s*.+$/mi, `status: ${status}`);
+      return { ...task };
+    },
+    writeSource: async (_p, taskId, source) => {
+      store.tasks[0].source = source;
+      return { ...store.tasks[0] };
+    },
+    checkpointLedger: (_project, payload) => {
+      ledgerPayload = payload;
+      return { written: true, path: 'docs/plans/ariadne-e2e.md', line: '- ok' };
+    },
+  };
+  const done = await completeSwarmTask({}, {
+    taskId: 'FX-E-8',
+    evidence: 'tests green',
+    notes: 'note',
+    ledger: true,
+  }, deps);
+  assert.equal(done.task.status, 'Done');
+  assert.equal(done.ledger.written, true);
+  assert.equal(ledgerPayload.taskId, 'FX-E-8');
+  assert.match(store.tasks[0].source, /\[x\] #1 Done me/);
+  assert.match(store.tasks[0].source, /## Closeout/);
+});
+
+test('four/six packs start with specifier role', () => {
+  const { getPack, packRequiresSpecifier } = require('./swarm');
+  assert.equal(getPack('four').roles[0], 'specifier');
+  assert.equal(getPack('six').roles[0], 'specifier');
+  assert.equal(packRequiresSpecifier(getPack('four')), true);
+  assert.equal(packRequiresSpecifier(getPack('two')), false);
+});
+
+test('assertSpecifierBeforeCoder blocks coder without AC/approval', () => {
+  const { assertSpecifierBeforeCoder, applySpecifierAcceptance, getPack } = require('./swarm');
+  const pack = getPack('four');
+  const bare = '---\nid: X\n---\n';
+  assert.throws(
+    () => assertSpecifierBeforeCoder({
+      pack,
+      fromRole: 'coder',
+      toRole: 'coder',
+      source: bare,
+    }),
+    /SPECIFIER_REQUIRED|specifier/,
+  );
+  assert.throws(
+    () => assertSpecifierBeforeCoder({
+      pack,
+      fromRole: 'specifier',
+      toRole: 'coder',
+      source: bare,
+      approved: true,
+    }),
+    /MISSING_APPROVABLE_AC|AC/,
+  );
+  const withAc = applySpecifierAcceptance(bare, {
+    criteria: ['Usuario completa el flujo', 'Test smoke pasa'],
+  });
+  assert.throws(
+    () => assertSpecifierBeforeCoder({
+      pack,
+      fromRole: 'specifier',
+      toRole: 'coder',
+      source: withAc,
+      summary: 'ready',
+    }),
+    /SPECIFIER_NOT_APPROVED|approved/,
+  );
+  const ok = assertSpecifierBeforeCoder({
+    pack,
+    fromRole: 'specifier',
+    toRole: 'coder',
+    source: withAc,
+    summary: 'AC ok',
+    approved: true,
+  });
+  assert.equal(ok.ok, true);
+});
+
+test('handoff to coder on four-pack requires specifier gate', async () => {
+  const { handoffSwarmTask, applySpecifierAcceptance } = require('./swarm');
+  const base = `---
+id: FX-E-46
+title: Spec gate
+status: In Progress
+priority: High
+type: enhancement
+---
+
+## Description
+
+demo
+`;
+  const store = {
+    tasks: [{
+      id: 'FX-E-46',
+      title: 'Spec gate',
+      status: 'In Progress',
+      priority: 'High',
+      type: 'enhancement',
+      source: base,
+    }],
+  };
+  const deps = memoryDeps(store);
+  await assert.rejects(
+    () => handoffSwarmTask({}, {
+      taskId: 'FX-E-46',
+      fromRole: 'coder',
+      toRole: 'coder',
+      summary: 'skip spec',
+      pack: 'four',
+    }, deps),
+    /specifier/i,
+  );
+
+  store.tasks[0].source = applySpecifierAcceptance(base, {
+    criteria: ['Criterio binario uno', 'Criterio binario dos'],
+  });
+  await handoffSwarmTask({}, {
+    taskId: 'FX-E-46',
+    fromRole: 'specifier',
+    toRole: 'coder',
+    summary: 'AC ok',
+    approved: true,
+    pack: 'four',
+  }, deps);
+  assert.match(store.tasks[0].source, /specifier → coder/);
+  assert.match(store.tasks[0].source, /Acceptance Criteria/);
+});
+
+test('packRequiresQa true for six only', () => {
+  const { getPack, packRequiresQa } = require('./swarm');
+  assert.equal(packRequiresQa(getPack('six')), true);
+  assert.equal(packRequiresQa(getPack('four')), false);
+  assert.equal(packRequiresQa(getPack('two')), false);
+});
+
+test('runQaGate fails closed and complete blocks Done', async () => {
+  const { runQaGate, completeSwarmTask } = require('./swarm');
+  assert.throws(
+    () => runQaGate({
+      runCommand: ({ step }) => ({
+        status: step === 'lint' ? 1 : 0,
+        stdout: '',
+        stderr: 'lint boom',
+      }),
+    }),
+    (error) => error.code === 'QA_GATE_FAILED',
+  );
+
+  const store = {
+    tasks: [{
+      id: 'FX-E-47',
+      title: 'MVP QA gate',
+      status: 'In Progress',
+      priority: 'Ultra High',
+      type: 'feature',
+      source: '---\nid: FX-E-47\ntitle: MVP QA gate\nstatus: In Progress\npriority: Ultra High\ntype: feature\n---\n',
+    }],
+  };
+
+  await assert.rejects(
+    () => completeSwarmTask({}, {
+      taskId: 'FX-E-47',
+      evidence: 'should not land',
+      pack: 'six',
+      ledger: false,
+    }, {
+      ...memoryDeps(store),
+      runCommand: () => ({ status: 1, stdout: '', stderr: 'npm test failed' }),
+    }),
+    /QA_GATE_FAILED|QA gate/,
+  );
+  assert.equal(store.tasks[0].status, 'In Progress');
+
+  const done = await completeSwarmTask({}, {
+    taskId: 'FX-E-47',
+    evidence: 'slice ok',
+    pack: 'six',
+    ledger: false,
+  }, {
+    ...memoryDeps(store),
+    runCommand: () => ({ status: 0, stdout: 'ok', stderr: '' }),
+  });
+  assert.equal(done.task.status, 'Done');
+  assert.match(done.evidence, /QA gate/);
+  assert.match(store.tasks[0].source, /hardender → qa/);
+  assert.match(store.tasks[0].source, /lint\+test gate/);
+});

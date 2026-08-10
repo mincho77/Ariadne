@@ -64,6 +64,7 @@ test('bugs board renders analytics and filtered kanban', () => {
   assert.match(html, /id="stats-detail" class="stats-detail is-collapsed"/);
   assert.match(html, /id="refresh-board"/);
   assert.match(html, /id="create-task"/);
+  assert.match(html, /Plantilla AC/);
   assert.match(html, /id="delete-task"/);
   assert.match(html, /\+ New bug/);
   assert.match(html, /queue-column/);
@@ -76,4 +77,5 @@ test('bugs board renders analytics and filtered kanban', () => {
   assert.match(html, /id="substatus-panel"/);
   assert.match(html, /\/api\/tasks\/substatus/);
   assert.match(html, /check-toggle/);
+  assert.match(html, /assertClientDoneEvidence/);
 });

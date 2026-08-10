@@ -15,11 +15,19 @@ npm run ariadne:sync -- --ledger docs/plans/ariadne-local.md
 
 | Paso | Herramienta | Qué hace |
 |------|-------------|----------|
-| 1 | `ariadne-audit-all` | `check_plan` en ledgers + audit Gantt del catálogo |
+| 1 | `ariadne-audit-all` | `check_plan` + higiene + **drift ledger↔Kanban** + audit Gantt |
 | 2 | `--fix` opcional | Higiene: refs `hecho` en columna Próxima acción → `—` |
 | 3 | `check_plan.py` | Revalida cada ledger (o los pasados con `--ledger`) |
 
-Exit **0** solo si todo pasa.
+**Checkpoint** (alinear estados del Registro / Control con el Kanban):
+
+```bash
+npm run ariadne:checkpoint
+npm run ariadne:checkpoint -- --dry-run
+# Hub: botón Checkpoint → POST /api/checkpoint
+```
+
+**Invariante:** filas `pendiente`/`en_progreso` del Registro que citan un ID de backlog (`AH-E-40`, `JM-B-3`, …) deben tener tarjeta en `backlog/`. Si el plan tiene más trabajo abierto que el Kanban, el audit falla.
 
 ## Flujo recomendado para agentes
 

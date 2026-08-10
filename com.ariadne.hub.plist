@@ -1,16 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template only. Install with: npm run hub:launchagent
+  Do not load this file as-is (paths are placeholders).
+  Docs: docs/launchagent-hub.md
+-->
 <plist version="1.0">
 <dict>
   <key>Label</key>
   <string>com.ariadne.hub</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/TU_USUARIO/.nvm/versions/node/v20.20.2/bin/node</string>
-    <string>/Users/TU_USUARIO/Code/Ariadne/server.js</string>
+    <string>__NODE_BIN__</string>
+    <string>__ARIADNE_ROOT__/server.js</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/TU_USUARIO/Code/Ariadne</string>
+  <string>__ARIADNE_ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ARIADNE_HUB_PORT</key>
+    <string>4177</string>
+    <key>ARIADNE_BOARD_PORT</key>
+    <string>6421</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

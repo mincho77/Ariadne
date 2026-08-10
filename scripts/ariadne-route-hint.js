@@ -39,6 +39,7 @@ function classifyMessage(text) {
       mode: 'lite',
       skill: 'ariadne-lite',
       modelTier: 'economy',
+      modelHint: 'cheap',
       reason: 'empty input defaults to lite',
     };
   }
@@ -49,6 +50,7 @@ function classifyMessage(text) {
         mode: 'full',
         skill: 'ariadne',
         modelTier: 'standard',
+        modelHint: 'strong',
         reason: `matched full-scope pattern: ${pattern}`,
       };
     }
@@ -60,6 +62,7 @@ function classifyMessage(text) {
         mode: 'lite',
         skill: 'ariadne-lite',
         modelTier: 'economy',
+        modelHint: 'cheap',
         reason: `matched lite pattern: ${pattern}`,
       };
     }
@@ -69,6 +72,7 @@ function classifyMessage(text) {
     mode: 'full',
     skill: 'ariadne',
     modelTier: 'standard',
+    modelHint: 'strong',
     reason: 'no lite pattern matched; default to full Ariadne for safety',
   };
 }

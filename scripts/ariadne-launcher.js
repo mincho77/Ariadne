@@ -34,6 +34,7 @@ function buildLaunchPlan(message) {
     env: {
       ARIADNE_SKILL: skillName,
       ARIADNE_MODEL_TIER: hint.modelTier,
+      ARIADNE_MODEL_HINT: hint.modelHint || (hint.modelTier === 'economy' ? 'cheap' : 'strong'),
       ARIADNE_ROUTE_MODE: hint.mode,
     },
     instructions: hint.mode === 'lite'

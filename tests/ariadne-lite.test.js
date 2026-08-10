@@ -6,12 +6,14 @@ test('classifyMessage routes queue moves to lite', () => {
   const row = classifyMessage('mueve JM-E-3 a la cola con ordinal 10');
   assert.equal(row.mode, 'lite');
   assert.equal(row.skill, 'ariadne-lite');
+  assert.equal(row.modelHint, 'cheap');
 });
 
 test('classifyMessage routes Pharos deploy to full', () => {
   const row = classifyMessage('audita con Pharos y despliega a producción');
   assert.equal(row.mode, 'full');
   assert.equal(row.skill, 'ariadne');
+  assert.equal(row.modelHint, 'strong');
 });
 
 test('classifyMessage routes Gantt work to full', () => {

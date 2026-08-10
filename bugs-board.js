@@ -25,6 +25,7 @@ const {
   boardDragHintHtml,
   boardCardInteractionScript,
 } = require('./board-card-interaction');
+const { boardDoneGateScript } = require('./done-gate');
 const { taskMatchesColumn } = require('./board-column-filter');
 const {
   taskCardSubstatusHtml,
@@ -296,7 +297,7 @@ const search=document.querySelector('#task-search');
 const searchCount=document.querySelector('#search-count');
 const refreshButton=document.querySelector('#refresh-board');
 ${statsPanelInitScript('ariadne-bugs-stats-open')}
-${boardCreateInitScript({ type: 'bug', priority: 'High', labels: ['bug'], promptText: 'New bug title (creates CODE-B-n):', buttonLabel: '+ New bug' })}
+${boardCreateInitScript({ type: 'bug', priority: 'High', labels: ['bug'], promptText: 'New bug title (creates CODE-B-n):', buttonLabel: '+ New bug', defaultTemplate: 'bug' })}
 ${boardDeleteInitScript({ confirmText: 'Delete {id}? This cannot be undone. Done tasks cannot be deleted.', blockBugs: false })}
 ${boardCardInteractionScript()}
 const actionError=document.querySelector('#action-error');
@@ -307,7 +308,8 @@ let selectedTask=null;
 refreshButton.onclick=()=>{refreshButton.disabled=true;refreshButton.textContent='↻ Actualizando…';window.location.reload()};
 function openTask(task){selectedTask=task;document.querySelector('#detail-title').textContent=(task.id?task.id+' · ':'')+task.title;document.querySelector('#detail-theme').textContent='Tema: '+task.theme;applyTaskDetailHtml(task);document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false;actionError.textContent='';if(detailSubstatus){detailSubstatus.textContent=task.effectiveSubstatus||'';detailSubstatus.hidden=!task.effectiveSubstatus}fillSubstatusOptions(task);if(typeof syncDeleteButton==='function')syncDeleteButton(task);modal.classList.add('open')}
 function filterTasks(){const q=search.value.trim().toLowerCase();let visible=0;cards.forEach((card)=>{const match=!q||card.dataset.search.includes(q);card.hidden=!match;if(match)visible++});columns.forEach((col)=>{const count=[...col.querySelectorAll('.task')].filter((c)=>!c.hidden).length;const el=col.querySelector('.column-count');if(el)el.textContent=count});searchCount.textContent=q?visible+' resultado'+(visible===1?'':'s'):''}
-async function moveTask(id,status){const r=await fetch('/api/tasks/status?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,status})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Error');location.reload()}
+${boardDoneGateScript()}
+async function moveTask(id,status){assertClientDoneEvidence(id,status);const r=await fetch('/api/tasks/status?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,status})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Error');location.reload()}
 search.addEventListener('input',filterTasks);
 bindTaskCards(cards,tasks,openTask);
 bindColumnDropTargets(columns,tasks,async(id,status)=>{try{await moveTask(id,status)}catch(err){document.querySelector('#action-error').textContent=err.message;modal.classList.add('open')}});

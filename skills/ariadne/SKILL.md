@@ -9,6 +9,22 @@ Keep one durable Markdown ledger as source of truth. Chat plans are summaries, n
 
 Goal: no Ariadne project advances blocked tasks or loses evidence between sessions.
 
+## Route lite vs full (Cursor)
+
+Before deep context, classify the request:
+
+```bash
+npm run ariadne:route-hint -- "<user message>"
+npm run ariadne:launcher -- "<user message>"   # adds skillFile + env
+```
+
+| Result | Load |
+|--------|------|
+| `ariadne-lite` | `skills/ariadne-lite/SKILL.md` |
+| `ariadne` | this file |
+
+Cursor rule (always on): `.cursor/rules/ariadne-route.mdc`. Wrapper docs: `docs/ariadne-launcher.md`.
+
 ## Módulo base: Gobierno de dependencias y orden estricto
 
 All Ariadne projects operate with an ordered queue and explicit dependencies.
@@ -37,6 +53,8 @@ Map Backlog/Kanban states to ledger intent:
 | Queue | Authorized and ordered | `pendiente` (queued) |
 | Doing | Active work | `en_progreso` |
 | Done | Finished and verified | `hecho` |
+
+**Invariant — Kanban covers open plan work:** if the ledger Registro or Control cites a backlog task ID (`AH-E-*`, `*-B-*`, …) while that row is `pendiente` / `en_progreso` / `bloqueado`, the Markdown card **must** exist under `backlog/tasks/`. A plan with more open work than the board is a defect; `npm run ariadne:audit` reports `LEDGER_WITHOUT_KANBAN`. Seed or enqueue cards before writing them into the plan.
 
 A task never advances if any dependency is:
 

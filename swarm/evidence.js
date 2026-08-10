@@ -68,6 +68,7 @@ function appendEvidence(source, payload) {
 
 module.exports = {
   stampNow,
+  ensureTrailingNewline,
   appendSectionBullet,
   formatHandoffLine,
   formatEvidenceLine,

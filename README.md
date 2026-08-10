@@ -46,8 +46,9 @@ Crear tarea localmente (sin HTTP):
 
 ```bash
 npm run task:create -- jurismate --bug "BUG producción · Upload congela"
-npm run task:create -- jurismate --mejora "Mejora de ranking"
-npm run task:create -- ariadne --enhancement "HUB · Auditoría multiproyecto"
+npm run task:create -- jurismate --mejora "Mejora de ranking" --template enhancement
+npm run task:create -- ariadne --enhancement "HUB · Auditoría multiproyecto" --template swarm
+# Plantillas AC: docs/ac-templates.md · GET /api/tasks/ac-templates
 ```
 
 Desde el tablero Kanban también puedes usar **+ New bug** o **+ New enhancement**.
@@ -142,15 +143,16 @@ Runbook completo:
 
 ## Arranque automático (macOS)
 
-Hub:
+**Un solo Hub:** `com.ariadne.hub`. El legado `com.jurismate.ariadne-hub` debe estar apagado (conflicto de puertos). Guía: [`docs/launchagent-hub.md`](docs/launchagent-hub.md).
 
 ```bash
-cp com.ariadne.hub.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ariadne.hub.plist 2>/dev/null || launchctl load ~/Library/LaunchAgents/com.ariadne.hub.plist
-launchctl kickstart -k gui/$(id -u)/com.ariadne.hub
+npm run hub:launchagent
+# equivalente: node scripts/install-hub-launchagent.js
 ```
 
-Cola de bugs (JurisMate, uno a uno):
+El instalador escribe `~/Library/LaunchAgents/com.ariadne.hub.plist`, hace bootout del legado y kickstart del Hub (sirve Gantt en `:4177`).
+
+Cola de bugs (JurisMate, uno a uno — no es el Hub):
 
 ```bash
 cp com.ariadne.bug-queue.jurismate.plist ~/Library/LaunchAgents/
@@ -158,7 +160,14 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ariadne.bug-queue.ju
 launchctl kickstart -k gui/$(id -u)/com.ariadne.bug-queue.jurismate
 ```
 
-Logs: `/tmp/ariadne-hub.log`, `/tmp/ariadne-bug-queue-jurismate.log`
+Logs Hub: `/tmp/ariadne-hub.log` · Runner: `/tmp/ariadne-bug-queue-jurismate.log`
+
+Bootout manual del Hub viejo:
+
+```bash
+launchctl bootout gui/$(id -u)/com.jurismate.ariadne-hub 2>/dev/null || true
+rm -f ~/Library/LaunchAgents/com.jurismate.ariadne-hub.plist
+```
 
 ## Gantt integrado
 
@@ -182,9 +191,15 @@ Adapter nativo Queue → Doing → evidencia (`docs/swarm/`, ledger `docs/plans/
 ```bash
 npm run swarm -- status --project ariadne
 npm run swarm -- run --project ariadne
+npm run swarm -- pack --task AH-E-32 --pack four
+npm run swarm -- brief --task AH-E-32 --pack four
 npm run swarm -- handoff --task AH-E-32 --from coder --to cleaner --summary "…"
 npm run swarm -- complete --task AH-E-32 --evidence "npm test → ok"
 ```
+
+## Seguridad npm (ChainDrop)
+
+`.npmrc` fuerza `ignore-scripts=true`. CI usa `npm ci --ignore-scripts`. Detalle: [`docs/npm-supply-chain.md`](docs/npm-supply-chain.md). Auditoría: `npm run security:npm-audit-worm`.
 
 Cloud agents: `AGENTS.md` y `docs/cloud-dev-environment.md`.
 
@@ -193,6 +208,7 @@ Auditoría multiproyecto (ledgers + backlog Gantt):
 ```bash
 npm run ariadne:sync -- --fix    # post-edit: audit + higiene + check_plan
 npm run ariadne:audit
+npm run ariadne:digest             # Doing/Queue/riesgos → .ariadne/digests/ (docs/daily-digest.md)
 npm run ariadne:route-hint -- "mueve tarea a cola"
 npm run ariadne:launcher -- "actualiza el ledger"
 eval "$(./scripts/ariadne-launcher.sh 'mueve a cola')"
@@ -200,10 +216,11 @@ eval "$(./scripts/ariadne-launcher.sh 'mueve a cola')"
 
 Modo liviano y automatización: `docs/ariadne-lite.md` · `docs/ariadne-automation.md` · launcher `docs/ariadne-launcher.md`.
 
-Detener el runner viejo de JurisMate si existía:
+Detener el runner viejo de JurisMate si existía (si aún usas el label antiguo del Hub, ver `docs/launchagent-hub.md`):
 
 ```bash
 launchctl bootout gui/$(id -u)/com.jurismate.ariadne-hub 2>/dev/null || true
+rm -f ~/Library/LaunchAgents/com.jurismate.ariadne-hub.plist
 ```
 
 ## Migración desde JurisMate

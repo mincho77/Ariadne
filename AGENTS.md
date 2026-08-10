@@ -25,6 +25,10 @@ Kanban task APIs (`/api/tasks/*`) listen on **`ARIADNE_BOARD_PORT`** (default `6
 
 Simple backlog/ledger updates: **`skills/ariadne-lite/`** (`docs/ariadne-lite.md`). After edits: **`npm run ariadne:sync -- --fix`** (`docs/ariadne-automation.md`).
 
+**Invariant:** open ledger work that cites `AH-E-*` / `*-B-*` must have a Kanban card (`ariadne:audit` fails on `LEDGER_WITHOUT_KANBAN`).
+
+**Route before loading skill** (Cursor rule `.cursor/rules/ariadne-route.mdc`):
+
 ```bash
 npm run ariadne:route-hint -- "mueve tarea a cola"   # JSON hint for wrappers
 npm run ariadne:launcher -- "actualiza el ledger"   # skill path + env exports

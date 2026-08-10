@@ -143,6 +143,14 @@ function createTaskFile(project, options, helpers) {
   const filePath = path.join(tasksDir, relativeFile);
   if (fs.existsSync(filePath)) throw new Error(`task file already exists: ${relativeFile}`);
 
+  const { resolveAcceptanceCriteria } = require('./lib/ac-templates');
+  const resolvedAc = resolveAcceptanceCriteria({
+    ...options,
+    type: draft.type,
+    labels: draft.labels,
+    title,
+  });
+
   const source = buildTaskSource({
     id,
     title,
@@ -151,7 +159,7 @@ function createTaskFile(project, options, helpers) {
     type: draft.type,
     labels: draft.labels,
     description: options.description || '',
-    acceptanceCriteria: Array.isArray(options.acceptanceCriteria) ? options.acceptanceCriteria : [],
+    acceptanceCriteria: resolvedAc.acceptanceCriteria,
   });
 
   fs.writeFileSync(filePath, source.endsWith('\n') ? source : `${source}\n`, 'utf8');
@@ -160,6 +168,7 @@ function createTaskFile(project, options, helpers) {
     file: path.join('tasks', relativeFile).split(path.sep).join('/'),
     path: filePath,
     source,
+    acTemplate: resolvedAc.template,
   };
 }
 

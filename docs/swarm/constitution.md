@@ -36,7 +36,7 @@ Inspirados en SwarmForge; adaptados a Markdown backlog + ledger.
 ## Roles (prompts cortos)
 
 ### specifier
-Traduce la solicitud / AC de la tarea a criterios binarios y, si aplica, escenarios Gherkin. Pide aprobación humana antes de handoff a coder.
+Traduce la solicitud / AC de la tarea a criterios binarios y, si aplica, escenarios Gherkin. En packs **four/six** es obligatorio antes de `coder` (`docs/swarm/specifier.md`). Pide aprobación humana (`--approved` / summary `AC ok`) antes del handoff.
 
 ### coder
 Implementa el slice aprobado con tests. No cambia alcance. Handoff a cleaner/refactorer con commit corto.
@@ -48,8 +48,10 @@ Limpieza behavior-preserving, DRY, cobertura. Sin features nuevas.
 Revisa límites de módulos y dirección de dependencias. Puede pedir cambios al coder.
 
 ### hardender / QA
-Endurecimiento y verificación final (scripts, humo UI). Emite la evidencia de cierre.
+Endurecimiento y verificación final (scripts, humo UI). Emite la evidencia de cierre. En six-pack, `complete` exige `npm run lint` + `npm test` verdes ([qa-gate.md](./qa-gate.md)).
 
 ## Integración Cursor
 
 Usar `npm run swarm -- status|run|handoff|complete` al tomar una tarea Queued. Un agente Cursor puede además adoptar esta constitution leyendo este archivo al iniciar.
+
+Backends opcionales por rol (Claude / Codex / Cursor): [backends.md](./backends.md). **Solo Ariadne** autoriza Done.

@@ -1,6 +1,8 @@
 const projects = document.querySelector('#projects');
 const empty = document.querySelector('#empty');
 const dialog = document.querySelector('#dialog');
+const hoyBody = document.querySelector('#hoy-body');
+const hoyRefresh = document.querySelector('#hoy-refresh');
 const DEFAULT_GANTT_BASE_URL = 'http://localhost:63447/';
 let ganttBaseUrl = DEFAULT_GANTT_BASE_URL;
 
@@ -40,6 +42,87 @@ async function load() {
   projects.querySelectorAll('[data-gantt]').forEach((button) => {
     button.onclick = () => openGantt(button.dataset.gantt);
   });
+  projects.querySelectorAll('[data-swarm-status]').forEach((button) => {
+    button.onclick = () => showSwarmStatus(button.dataset.swarmStatus);
+  });
+  projects.querySelectorAll('[data-swarm-observe]').forEach((button) => {
+    button.onclick = () => showSwarmObserve(button.dataset.swarmObserve);
+  });
+  projects.querySelectorAll('[data-swarm-run]').forEach((button) => {
+    button.onclick = () => runSwarm(button.dataset.swarmRun);
+  });
+  await loadHoy();
+}
+
+function hoyProjectHtml(item) {
+  const next = item.next
+    ? `${escapeHtml(item.next.id)} · ${escapeHtml(item.next.title)}`
+    : (item.blockedHead
+      ? `Bloqueada: ${escapeHtml(item.blockedHead.id)}`
+      : 'Cola vacía');
+  const doing = item.doingCount
+    ? item.doing.map((task) => `<li><strong>${escapeHtml(task.id)}</strong> ${escapeHtml(task.title || '')}</li>`).join('')
+    : '<li class="muted">Nada en Doing</li>';
+  const risks = item.risks?.length
+    ? item.risks.map((risk) => `<li>${escapeHtml(risk.message)}</li>`).join('')
+    : '<li class="muted">Sin alertas</li>';
+
+  return `<article class="hoy-card" data-hoy-project="${escapeHtml(item.project)}">
+    <div class="hoy-card-top">
+      <h3>${escapeHtml(item.name || item.project)}</h3>
+      <span class="hoy-pill">${item.doingCount} doing · ${item.queueLength} queue</span>
+    </div>
+    <div class="hoy-grid">
+      <section>
+        <p class="hoy-label">Doing</p>
+        <ul>${doing}</ul>
+      </section>
+      <section>
+        <p class="hoy-label">Siguiente (Queue)</p>
+        <p class="hoy-next">${next}</p>
+      </section>
+      <section>
+        <p class="hoy-label">Riesgos</p>
+        <ul>${risks}</ul>
+      </section>
+    </div>
+    <div class="hoy-actions">
+      <button type="button" data-swarm-status="${escapeHtml(item.project)}" class="btn-swarm secondary">Status</button>
+      <button type="button" data-swarm-observe="${escapeHtml(item.project)}" class="btn-swarm secondary">Handoffs</button>
+      <button type="button" data-swarm-run="${escapeHtml(item.project)}" class="btn-swarm">Run swarm</button>
+    </div>
+  </article>`;
+}
+
+async function loadHoy() {
+  if (!hoyBody) return;
+  try {
+    const response = await fetch('/api/hoy', { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) {
+      hoyBody.innerHTML = `<p class="hoy-empty">${escapeHtml(data.error || 'No se pudo cargar Hoy')}</p>`;
+      return;
+    }
+    if (!data.projects?.length) {
+      hoyBody.innerHTML = '<p class="hoy-empty">Sin proyectos para Hoy.</p>';
+      return;
+    }
+    hoyBody.innerHTML = data.projects.map(hoyProjectHtml).join('');
+    hoyBody.querySelectorAll('[data-swarm-status]').forEach((button) => {
+      button.onclick = () => showSwarmStatus(button.dataset.swarmStatus);
+    });
+    hoyBody.querySelectorAll('[data-swarm-observe]').forEach((button) => {
+      button.onclick = () => showSwarmObserve(button.dataset.swarmObserve);
+    });
+    hoyBody.querySelectorAll('[data-swarm-run]').forEach((button) => {
+      button.onclick = async () => {
+        await runSwarm(button.dataset.swarmRun);
+        await loadHoy();
+      };
+    });
+  } catch (error) {
+    hoyBody.innerHTML = `<p class="hoy-empty">${escapeHtml(error.message || 'Error de red')}</p>`;
+  }
 }
 
 function formatConfidenceLabel(level) {
@@ -132,6 +215,9 @@ function card(p) {
     ${ganttMetricsHtml(p.ganttMetrics)}
     <div class="card-actions">
       <button data-gantt="${escapeHtml(p.slug)}" class="btn-gantt">Abrir Gantt</button>
+      <button data-swarm-status="${escapeHtml(p.slug)}" class="btn-swarm secondary">Swarm status</button>
+      <button data-swarm-observe="${escapeHtml(p.slug)}" class="btn-swarm secondary">Handoffs</button>
+      <button data-swarm-run="${escapeHtml(p.slug)}" class="btn-swarm">Run swarm</button>
     </div>
   </article>`;
 }
@@ -153,6 +239,61 @@ function openGantt(slug) {
   window.open(url.toString(), 'ariadne-gantt', 'noopener');
 }
 
+async function showSwarmStatus(slug) {
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(slug)}/swarm/status?detail=0`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) return alert(data.error || 'No se pudo leer swarm status');
+    const next = data.next ? `${data.next.id} · ${data.next.title}` : (data.blockedHead
+      ? `Bloqueada: ${data.blockedHead.id}`
+      : 'Cola vacía');
+    alert(`Swarm · ${slug}\nQueue: ${data.queueLength} · Doing: ${data.doingCount}\nNext: ${next}`);
+  } catch (error) {
+    alert(error.message || 'Error de red');
+  }
+}
+
+async function showSwarmObserve(slug) {
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(slug)}/swarm/observe`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) return alert(data.error || 'No se pudo leer observabilidad');
+    const doing = (data.doingDetail || []).map((item) => {
+      const role = item.activeRole || '—';
+      const last = item.lastHandoff
+        ? `${item.lastHandoff.fromRole}→${item.lastHandoff.toRole}`
+        : 'sin handoff';
+      const trees = (item.worktrees || []).map((tree) => tree.name).join(', ') || '—';
+      return `${item.id} · rol ${role} · ${last} · wt ${trees}`;
+    }).join('\n') || '(nada en Doing)';
+    const recent = (data.recentHandoffs || []).slice(0, 5).map((row) => {
+      if (row.fromRole) return `${row.taskId || ''} ${row.fromRole}→${row.toRole}: ${row.summary || ''}`.trim();
+      return JSON.stringify(row).slice(0, 120);
+    }).join('\n') || '(sin log)';
+    alert(`Observabilidad · ${slug}\n\nDoing:\n${doing}\n\nHandoffs recientes:\n${recent}\n\nLog: ${data.handoffLog || '—'}`);
+  } catch (error) {
+    alert(error.message || 'Error de red');
+  }
+}
+
+async function runSwarm(slug) {
+  if (!window.confirm(`¿Arrancar cabeza de Queue en ${slug}?`)) return;
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(slug)}/swarm/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    const data = await response.json();
+    if (!response.ok) return alert(data.error || 'No se pudo hacer run');
+    const task = data.task || {};
+    alert(`Run · ${task.id || '?'} → ${task.status || ''}${data.resumed ? ' (resume)' : ''}`);
+    load();
+  } catch (error) {
+    alert(error.message || 'Error de red');
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
 }
@@ -169,4 +310,26 @@ document.querySelector('#project-form').onsubmit = async (event) => {
 };
 window.addEventListener('focus', load);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+if (hoyRefresh) hoyRefresh.onclick = () => loadHoy();
+const checkpointBtn = document.querySelector('#checkpoint');
+if (checkpointBtn) {
+  checkpointBtn.onclick = async () => {
+    checkpointBtn.disabled = true;
+    try {
+      const response = await fetch('/api/checkpoint', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ledger: 'docs/plans/ariadne-e2e.md' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Checkpoint falló');
+      alert(`Checkpoint OK\nPróxima: ${data.suggestedNext || '—'}\nCambios: ${(data.changes || []).length}`);
+      await loadHoy();
+    } catch (error) {
+      alert(error.message || 'Checkpoint falló');
+    } finally {
+      checkpointBtn.disabled = false;
+    }
+  };
+}
 loadHubConfig().finally(load);

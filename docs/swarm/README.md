@@ -27,34 +27,48 @@ Ver [constitution.md](./constitution.md).
 | Pack | Roles | Uso |
 |------|--------|-----|
 | two-pack | coder → cleaner | Tareas pequeñas backend |
-| four-pack | specifier → coder → refactorer → architect | Spec + implementación |
-| six-pack | + hardender + QA | MVP / cambios mayores |
+| four-pack | specifier → coder → cleaner → architect | Spec + implementación (**specifier obligatorio**) |
+| six-pack | + hardender → qa | MVP / cambios mayores (**specifier obligatorio**) |
+
+Prompts: [prompts.md](./prompts.md). Specifier gate: [specifier.md](./specifier.md). Backends: [backends.md](./backends.md). Brief CLI: `npm run swarm -- brief --task ID --pack four`.
 
 ## Roadmap
 
 | Versión | Estado | Entrega |
 |---------|--------|---------|
 | **v0** | hecho | docs + constitution (este directorio) |
-| **v1 nativo** | en curso | CLI `ariadne-swarm` ✅ · packs, worktrees, evidencia, Hub CTA (AS-E-2…5 / AH-E-4…) |
-| **v1.1 diario** | pendiente | Hoy, Done gate, pack auto, LaunchAgent (AH-E-31…35, AS-E-6) |
-| **v2 calidad** | pendiente | specifier/QA/observabilidad/E2E (AS-E-7…10) |
-| **v3 SwarmForge** | diferido | export `swarmforge.conf` + backends (AS-E-11/12) |
+| **v1 nativo** | hecho (Fase 0 core) | CLI · packs · worktrees · closeout · Hub CTA/API (AH-E-31…35) |
+| **v1.1 diario** | hecho (AH-E-36…44) | Hoy, Done gate, LaunchAgent, digest, plantillas AC |
+| **v2 calidad** | hecho (AH-E-45…49) | policy · specifier · QA · observabilidad · fixture E2E |
+| **v3 SwarmForge** | hecho (AH-E-50/51) | export conf opcional · backends por rol documentados |
 
 ## CLI `ariadne-swarm`
 
 ```bash
 npm run swarm -- status --project ariadne
-npm run swarm -- run --project ariadne            # cabeza de Queue → In Progress
-npm run swarm -- run --project ariadne --task AH-E-4 --role coder
-npm run swarm -- handoff --task AH-E-4 --from coder --to cleaner --summary "tests green"
-npm run swarm -- complete --task AH-E-4 --evidence "npm test → ok"
+npm run swarm -- run --project ariadne
+npm run swarm -- packs
+npm run swarm -- pack --task AH-E-45   # pack + modelHint (cheap|strong)
+npm run swarm -- brief --task AH-E-32 --pack four
+npm run swarm -- handoff --task AH-E-32 --from coder --to cleaner --summary "tests green"
+npm run swarm -- complete --task AH-E-32 --evidence "npm test → ok"
 ```
 
 Reglas (módulo `swarm/`):
 
 1. `run` solo acepta **Queue** con dependencias FS en **Done** (o reanuda Doing).
-2. `handoff` escribe en la tarea bajo `## Swarm handoffs`.
-3. `complete` exige `--evidence`, la anota en `## Evidence` y marca **Done**.
+2. `brief` incluye AC, deps, paths y prompts del pack.
+3. `worktree` crea/reusa `.worktrees/<task>-<role>` (gitignore).
+4. `handoff` escribe en la tarea bajo `## Swarm handoffs`.
+5. `complete` exige `--evidence`, marca AC, escribe `## Closeout` y (por defecto) checkpoint en el ledger E2E (`--no-ledger` para omitir). En six-pack corre lint+test ([qa-gate.md](./qa-gate.md)).
+
+## Worktrees
+
+```bash
+npm run swarm -- worktree --task AH-E-33 --role coder --project ariadne
+```
+
+Crea `.worktrees/ah-e-33-coder` en una rama `swarm/ah-e-33/coder`. El directorio `.worktrees/` está en `.gitignore`.
 
 ## Relación con el Gantt
 

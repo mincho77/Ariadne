@@ -60,6 +60,7 @@ test('mejoras board renders filtered kanban without bugs', () => {
   assert.match(html, /id="stats-detail" class="stats-detail is-collapsed"/);
   assert.match(html, /id="refresh-board"/);
   assert.match(html, /id="create-task"/);
+  assert.match(html, /Plantilla AC/);
   assert.match(html, /id="delete-task"/);
   assert.match(html, /\+ New enhancement/);
   assert.match(html, /Mejoras por área/);
@@ -74,4 +75,5 @@ test('mejoras board renders filtered kanban without bugs', () => {
   assert.match(html, /\/api\/tasks\/substatus/);
   assert.match(html, /\/api\/tasks\/checklist/);
   assert.match(html, /check-toggle/);
+  assert.match(html, /assertClientDoneEvidence/);
 });
