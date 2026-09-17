@@ -1,0 +1,15 @@
+{
+  "options": {
+    "capacity": 2,
+    "capacityBugs": 1,
+    "capacityEnhancements": 1,
+    "includeDone": false,
+    "startDate": "2026-08-04",
+    "iaHoursPerDay": 8
+  },
+  "expect": {
+    "pendingTasks": 3,
+    "parallelAtStart": ["GT-B-1", "GT-E-1"],
+    "order": ["GT-B-1", "GT-E-1", "GT-B-2"]
+  }
+}

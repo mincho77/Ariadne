@@ -1,0 +1,15 @@
+{
+  "options": {
+    "capacity": 1,
+    "includeDone": false,
+    "startDate": "2026-08-04",
+    "iaHoursPerDay": 8
+  },
+  "expect": {
+    "pendingTasks": 3,
+    "order": ["GT-E-1", "GT-E-3", "GT-E-2"],
+    "diagnosticCodes": {
+      "GT-E-1": ["operational_in_progress"]
+    }
+  }
+}

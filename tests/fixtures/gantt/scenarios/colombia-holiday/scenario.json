@@ -1,0 +1,11 @@
+{
+  "options": {
+    "capacity": 1,
+    "includeDone": false,
+    "startDate": "2026-01-01",
+    "iaHoursPerDay": 8
+  },
+  "expect": {
+    "firstWorkingStartNot": "2026-01-01"
+  }
+}

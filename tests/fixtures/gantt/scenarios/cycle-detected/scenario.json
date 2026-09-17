@@ -1,0 +1,10 @@
+{
+  "options": {
+    "capacity": 2,
+    "includeDone": false,
+    "startDate": "2026-08-04"
+  },
+  "expect": {
+    "cycleDetected": true
+  }
+}

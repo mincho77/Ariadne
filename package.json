@@ -1,0 +1,45 @@
+{
+  "name": "ariadne",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local multi-project hub for Ariadne governance and Backlog.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mincho77/Ariadne.git"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "lint": "node scripts/ariadne-lint.js",
+    "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
+    "gantt:audit": "node scripts/gantt-backlog-audit.js --all",
+    "smoke:cloud": "node --test tests/cloud-dev-smoke.test.js",
+    "smoke:lifecycle": "node --test tests/two-project-lifecycle.test.js",
+    "ariadne:audit": "node scripts/ariadne-audit-all.js",
+    "ariadne:audit:fix": "node scripts/ariadne-audit-all.js --fix",
+    "ariadne:sync": "node scripts/ariadne-sync.js",
+    "ariadne:checkpoint": "node scripts/ariadne-checkpoint.js",
+    "ariadne:digest": "node scripts/ariadne-digest.js",
+    "ariadne:route-hint": "node scripts/ariadne-route-hint.js",
+    "ariadne:launcher": "node scripts/ariadne-launcher.js",
+    "swarm": "node scripts/ariadne-swarm.js",
+    "ariadne-swarm": "node scripts/ariadne-swarm.js",
+    "security:npm-audit-worm": "node scripts/npm-chaindrop-audit.js",
+    "task:create": "node scripts/create-task.js",
+    "bug:create": "node scripts/create-task.js",
+    "queue:bugs": "node scripts/bug-queue-runner.js",
+    "queue:complete": "node scripts/queue-complete.js",
+    "queue:packet": "node scripts/queue-packet.js",
+    "hub:launchagent": "node scripts/install-hub-launchagent.js",
+    "task:import:improvements": "node scripts/import-improvements.js",
+    "task:migrate": "node scripts/migrate-task-ids.js",
+    "task:normalize": "node scripts/migrate-task-ids.js",
+    "release:check:standalone": "node scripts/check-standalone-ready.js",
+    "release:bundle": "npm run release:check:standalone && node scripts/create-standalone-bundle.js"
+  },
+  "dependencies": {
+    "backlog.md": "latest",
+    "yaml": "^2.7.0"
+  }
+}

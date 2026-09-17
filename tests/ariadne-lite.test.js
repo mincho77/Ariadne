@@ -1,0 +1,28 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { classifyMessage } = require('../scripts/ariadne-route-hint');
+
+test('classifyMessage routes queue moves to lite', () => {
+  const row = classifyMessage('mueve PD-E-3 a la cola con ordinal 10');
+  assert.equal(row.mode, 'lite');
+  assert.equal(row.skill, 'ariadne-lite');
+  assert.equal(row.modelHint, 'cheap');
+});
+
+test('classifyMessage routes Pharos deploy to full', () => {
+  const row = classifyMessage('audita con Pharos y despliega a producción');
+  assert.equal(row.mode, 'full');
+  assert.equal(row.skill, 'ariadne');
+  assert.equal(row.modelHint, 'strong');
+});
+
+test('classifyMessage routes Gantt work to full', () => {
+  const row = classifyMessage('integrar lib/gantt scheduler');
+  assert.equal(row.mode, 'full');
+});
+
+test('classifyMessage routes ledger audit fix to lite', () => {
+  const row = classifyMessage('Ariadne audita corrige');
+  assert.equal(row.mode, 'lite');
+  assert.equal(row.skill, 'ariadne-lite');
+});

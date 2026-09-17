@@ -1,0 +1,24 @@
+{
+  "options": {
+    "capacity": 2,
+    "resourceAware": true,
+    "resourceConfig": {
+      "pools": [
+        {
+          "id": "solo-backend",
+          "skills": ["backend"],
+          "resourceTypes": ["human"],
+          "maxParallel": 1
+        }
+      ]
+    },
+    "includeDone": false,
+    "startDate": "2026-08-04"
+  },
+  "expect": {
+    "pendingTasks": 2,
+    "serialDaysMin": 4,
+    "slackPresent": true,
+    "resourceSerializes": true
+  }
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "ariadne",
+    "name": "Ariadne",
+    "taskCode": "AH",
+    "path": "/home/user/Ariadne",
+    "port": 6422
+  },
+  {
+    "slug": "project-demo",
+    "name": "Proyecto Demo",
+    "taskCode": "PD",
+    "path": "/path/to/project-demo",
+    "port": 6421
+  }
+]

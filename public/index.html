@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ariadne Hub</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <header class="hub-header">
+      <div>
+        <p class="eyebrow">Ariadne</p>
+        <h1>Proyectos</h1>
+        <p class="lede">Dos carriles separados: bugs para estabilidad, mejoras para evolución. Los bugs siempre tienen prioridad operativa.</p>
+        <p class="lede"><a href="/portfolio.html" class="nav-link">Portafolio Gantt multiproyecto →</a></p>
+      </div>
+      <button id="new-project" class="btn-primary">+ Nuevo proyecto</button>
+    </header>
+    <section id="hoy" class="hoy-panel" aria-label="Command center Hoy">
+      <div class="hoy-head">
+        <div>
+          <p class="eyebrow">Hoy</p>
+          <h2>Command center</h2>
+        </div>
+        <button type="button" id="hoy-refresh" class="btn-secondary">Actualizar</button>
+        <button type="button" id="checkpoint" class="btn-secondary" title="Alinear ledger E2E con Kanban">Checkpoint</button>
+      </div>
+      <div id="hoy-body" class="hoy-body">
+        <p class="hoy-empty">Cargando foco del día…</p>
+      </div>
+    </section>
+    <section id="projects" class="project-grid"></section>
+    <p id="empty" class="empty" hidden>Aún no hay proyectos. Crea el primero para inicializar su backlog.</p>
+  </main>
+  <dialog id="dialog">
+    <form method="dialog" id="project-form">
+      <h2>Nuevo proyecto</h2>
+      <label>Nombre<input name="name" required placeholder="Ej. Proyecto Demo IA"></label>
+      <label>Ruta existente <span>(opcional)</span><input name="path" placeholder="/ruta/al/proyecto"></label>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn-secondary">Cancelar</button>
+        <button class="btn-primary" value="default">Crear</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/app.js"></script>
+</body>
+</html>
