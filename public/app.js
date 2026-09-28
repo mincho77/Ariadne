@@ -312,6 +312,16 @@ window.addEventListener('focus', load);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 if (hoyRefresh) hoyRefresh.onclick = () => loadHoy();
 const checkpointBtn = document.querySelector('#checkpoint');
+const copyTestPlanBtn = document.querySelector('#copy-test-plan-prompt');
+if (copyTestPlanBtn) {
+  const testPlanPrompt = 'Ejecutar skill kanoa-parity-autopilot con config backlog/docs/plans/kanoa-parity.test-plan.json. No pedir “continua”. Entregar PASS/FAIL, bugs y plan de correcciones. No iniciar fixes hasta que yo confirme.';
+  copyTestPlanBtn.onclick = async () => {
+    await navigator.clipboard.writeText(testPlanPrompt);
+    const prev = copyTestPlanBtn.textContent;
+    copyTestPlanBtn.textContent = 'Copiado';
+    setTimeout(() => { copyTestPlanBtn.textContent = prev; }, 1600);
+  };
+}
 if (checkpointBtn) {
   checkpointBtn.onclick = async () => {
     checkpointBtn.disabled = true;

@@ -23,6 +23,7 @@
     "ariadne:digest": "node scripts/ariadne-digest.js",
     "ariadne:route-hint": "node scripts/ariadne-route-hint.js",
     "ariadne:launcher": "node scripts/ariadne-launcher.js",
+    "test-plan:autopilot": "node scripts/ariadne/test-plan-autopilot.mjs",
     "swarm": "node scripts/ariadne-swarm.js",
     "ariadne-swarm": "node scripts/ariadne-swarm.js",
     "security:npm-audit-worm": "node scripts/npm-chaindrop-audit.js",

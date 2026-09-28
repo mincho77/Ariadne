@@ -28,6 +28,10 @@ const {
 const { boardDoneGateScript } = require('./done-gate');
 const { taskMatchesColumn } = require('./board-column-filter');
 const {
+  copyPlanInstructionButtonHtml,
+  copyPlanInstructionScript,
+} = require('./lib/test-plan-prompt');
+const {
   taskCardSubstatusHtml,
   boardSubstatusStyles,
   boardSubstatusPanelHtml,
@@ -286,7 +290,7 @@ ${statsHtml}
   <span id="last-refresh" class="muted" aria-live="polite">Actualizado ahora</span>
 </div>
 <main class="board">${cards}</main>
-<div id="modal" class="modal"><div class="panel"><button class="close">×</button><div class="meta"><span id="detail-substatus" class="substatus"></span></div><h2 id="detail-title"></h2><p id="detail-theme" class="muted"></p><div id="detail-view">${boardSubstatusPanelHtml()}<div id="detail-body" class="detail"></div></div><div id="detail-edit" hidden><textarea id="source-editor" class="source-editor"></textarea><div class="edit-actions"><button id="save-task" class="primary">Guardar</button><button id="cancel-edit" class="secondary">Cancelar</button></div></div><p id="action-error" class="muted"></p><div class="actions"><button id="edit-task" class="secondary">Editar texto</button>${boardDeleteButton('Delete')}<button id="copy-action" class="secondary">Copiar instrucción</button></div></div></div>
+<div id="modal" class="modal"><div class="panel"><button class="close">×</button><div class="meta"><span id="detail-substatus" class="substatus"></span></div><h2 id="detail-title"></h2><p id="detail-theme" class="muted"></p><div id="detail-view">${boardSubstatusPanelHtml()}<div id="detail-body" class="detail"></div></div><div id="detail-edit" hidden><textarea id="source-editor" class="source-editor"></textarea><div class="edit-actions"><button id="save-task" class="primary">Guardar</button><button id="cancel-edit" class="secondary">Cancelar</button></div></div><p id="action-error" class="muted"></p><div class="actions"><button id="edit-task" class="secondary">Editar texto</button>${boardDeleteButton('Delete')}${copyPlanInstructionButtonHtml({ label: 'Copiar instrucción' })}</div></div></div>
 <script>
 const tasks=${taskData};
 const project=${JSON.stringify(project.slug)};
@@ -316,7 +320,7 @@ bindColumnDropTargets(columns,tasks,async(id,status)=>{try{await moveTask(id,sta
 document.querySelector('#edit-task').onclick=()=>{document.querySelector('#source-editor').value=selectedTask.source||'';document.querySelector('#detail-view').hidden=true;document.querySelector('#detail-edit').hidden=false;if(typeof syncDeleteButton==='function')syncDeleteButton(null)};
 document.querySelector('#cancel-edit').onclick=()=>{document.querySelector('#detail-edit').hidden=true;document.querySelector('#detail-view').hidden=false;if(typeof syncDeleteButton==='function')syncDeleteButton(selectedTask)};
 document.querySelector('#save-task').onclick=async()=>{const r=await fetch('/api/tasks/content?project='+encodeURIComponent(project),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:selectedTask.id,source:document.querySelector('#source-editor').value})});const j=await r.json();if(!r.ok){document.querySelector('#action-error').textContent=j.error;return}location.reload()};
-document.querySelector('#copy-action').onclick=async()=>{if(!selectedTask)return;await navigator.clipboard.writeText('Atiende '+selectedTask.id+': corrige el bug, prueba, audita con Pharos y despliega si pasa.');document.querySelector('#copy-action').textContent='Copiado';setTimeout(()=>document.querySelector('#copy-action').textContent='Copiar instrucción',1500)};
+${copyPlanInstructionScript({ idleLabel: 'Copiar instrucción', doneLabel: 'Copiado' })}
 document.querySelector('.close').onclick=()=>modal.classList.remove('open');modal.onclick=(e)=>{if(e.target===modal)modal.classList.remove('open')};
 </script>
 </body>

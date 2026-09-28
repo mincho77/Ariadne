@@ -1,0 +1,28 @@
+{
+  "projectKey": "KA",
+  "planName": "kanoa-parity",
+  "tasksDir": "backlog/tasks",
+  "reportGlob": "backlog/docs/reports/parity-audit-*.json",
+  "runCommand": "cd frontend && node scripts/parity-audit.mjs",
+  "preflightUrls": [
+    "http://localhost:8000/projects",
+    "http://localhost:5173/",
+    "http://localhost:4200/discovery-v3"
+  ],
+  "cases": [
+    {
+      "id": "T-001",
+      "title": "Arranque de aplicaciones",
+      "priority": "P0",
+      "dependency": "KA-E-BASE",
+      "tags": ["arranque", "smoke"]
+    },
+    {
+      "id": "T-002",
+      "title": "Navegacion base",
+      "priority": "P0",
+      "dependency": "KA-E-BASE",
+      "tags": ["ui", "tabs"]
+    }
+  ]
+}

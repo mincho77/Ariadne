@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const TASK_ID_PATTERN = /^([A-Z]{2})-([BE])-(\d+)$/i;
+const TASK_ID_PATTERN = /^([A-Z]{2})-([BET])-(\d+)$/i;
 
 const DEFAULT_PROJECT_CODES = {
   ariadne: 'AH',
@@ -22,7 +22,10 @@ function projectTaskCode(project) {
   return compact.slice(0, 2).toUpperCase() || 'PR';
 }
 
-function taskKindForId({ type, labels, title }, isBugTask) {
+function taskKindForId({ type, labels, title, kind }, isBugTask) {
+  const explicit = String(kind || '').trim().toUpperCase();
+  if (explicit === 'T' || explicit === 'B' || explicit === 'E') return explicit;
+  if (String(type || '').toLowerCase() === 'test') return 'T';
   return isBugTask({ type, labels, title }) ? 'B' : 'E';
 }
 
@@ -113,12 +116,17 @@ function createTaskFile(project, options, helpers) {
   if (!title) throw new Error('title is required');
 
   const draft = {
-    type: options.type || (options.kind === 'B' ? 'bug' : 'enhancement'),
+    type: options.type
+      || (options.kind === 'B' ? 'bug' : options.kind === 'T' ? 'test' : 'enhancement'),
     labels: Array.isArray(options.labels) ? options.labels : [],
     title,
+    kind: options.kind,
   };
   if (draft.type === 'bug' && !draft.labels.some((label) => String(label).toLowerCase() === 'bug')) {
     draft.labels.push('bug');
+  }
+  if (draft.type === 'test' && !draft.labels.some((label) => String(label).toLowerCase() === 'test')) {
+    draft.labels.push('test');
   }
 
   const id = options.id
@@ -127,7 +135,7 @@ function createTaskFile(project, options, helpers) {
 
   const parsed = parseTypedTaskId(id);
   if (!parsed) {
-    throw new Error('task id must match XX-B-1 or XX-E-1');
+    throw new Error('task id must match XX-B-1, XX-E-1 or XX-T-1');
   }
 
   const expectedKind = taskKindForId(draft, isBugTask);

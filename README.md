@@ -197,6 +197,18 @@ npm run swarm -- handoff --task AH-E-32 --from coder --to cleaner --summary "…
 npm run swarm -- complete --task AH-E-32 --evidence "npm test → ok"
 ```
 
+## Test-plan autopilot (Kanoa / genérico)
+
+Skill: `skills/kanoa-parity-autopilot/`. Motor:
+
+```bash
+npm run test-plan:autopilot -- --config skills/kanoa-parity-autopilot/templates/test-plan.template.json
+# o atajo Kanoa (desde el repo del producto):
+./scripts/ariadne/run-parity-autopilot.sh /path/to/kanoa
+```
+
+Crea/sincroniza tareas `*-T-*`, bugs `*-B-*` y plan de correcciones bajo `backlog/docs/reports/`.
+
 ## Seguridad npm (ChainDrop)
 
 `.npmrc` fuerza `ignore-scripts=true`. CI usa `npm ci --ignore-scripts`. Detalle: [`docs/npm-supply-chain.md`](docs/npm-supply-chain.md). Auditoría: `npm run security:npm-audit-worm`.
