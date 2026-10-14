@@ -10,16 +10,19 @@ const CHECK_PLAN = path.join(ROOT, 'skills', 'ariadne', 'scripts', 'check_plan.p
 const GANTT_AUDIT = path.join(ROOT, 'scripts', 'gantt-backlog-audit.js');
 const { auditLedgerFile, fixLedgerFile } = require('../lib/ledger-hygiene');
 const { auditLedgerBacklogDrift } = require('../lib/ledger-backlog-drift');
+const { auditDafoFile } = require('../lib/dafo-audit');
 
 function usage() {
   console.error(`Usage:
-  node scripts/ariadne-audit-all.js [--json] [--fix]
+  node scripts/ariadne-audit-all.js [--json] [--fix] [--interactive]
 
 Runs check_plan.py on every docs/plans/*.md ledger.
 Detects stale "Próxima acción" cells pointing at hecho/cancelado IDs.
 Detects ledger↔Kanban drift: open plan rows that cite AH-E-* / PD-B-* without a backlog card.
 With --fix, rewrites those cells to "—" (dry-run otherwise reports only).
 If projects.json exists, also runs gantt-backlog-audit.js --all --json.
+Reports DAFO factors and the recorded viability verdict from each ledger.
+With --interactive, asks about missing scope, DAFO factors, and verdict; answers are used for this report and are not saved.
 Exit code 1 when any ledger errors, drift, or gantt issues exist.
 `);
   process.exit(1);
@@ -103,6 +106,10 @@ const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) usage();
 const jsonOut = args.includes('--json');
 const applyFix = args.includes('--fix');
+const interactive = args.includes('--interactive') && process.stdin.isTTY;
+if (args.includes('--interactive') && !interactive) {
+  console.error('DAFO interactive mode requires a terminal; continuing without questions.');
+}
 
 const ledgerPaths = listLedgers();
 const hygiene = ledgerPaths.map((ledgerPath) => auditLedgerFile(ledgerPath));
@@ -115,6 +122,17 @@ const drift = ledgerPaths.map((ledgerPath) => auditLedgerBacklogDrift(ledgerPath
 const ledgers = ledgerPaths.map(runCheckPlan);
 const gantt = runGanttAudit();
 const projects = summarizeProjects();
+
+async function runDafoAudits() {
+  const reports = [];
+  for (const ledgerPath of ledgerPaths) {
+    reports.push(await auditDafoFile(ledgerPath, { interactive }));
+  }
+  return reports;
+}
+
+async function main() {
+const dafo = await runDafoAudits();
 
 const ledgerErrors = ledgers.reduce((sum, row) => sum + row.errors, 0);
 const ledgerFailed = ledgers.filter((row) => !row.ok).length;
@@ -147,6 +165,7 @@ const report = {
     issues: row.issues,
   })),
   driftSummary: { errors: driftIssues },
+  dafo,
   projects,
   gantt,
   ok: totalProblems === 0 && ledgerFailed === 0,
@@ -159,6 +178,12 @@ if (jsonOut) {
   for (const row of ledgers) {
     const mark = row.ok ? 'OK' : 'FAIL';
     console.log(`  [${mark}] ${row.ledger} (${row.errors} errors, ${row.warnings} warnings)`);
+  }
+  console.log('\nDAFO viability:');
+  for (const row of dafo) {
+    const missing = row.missing.length ? `; missing: ${row.missing.join(', ')}` : '';
+    const asked = row.questionsAsked ? `; asked ${row.questionsAsked}, used ${row.answersUsed} answer(s)` : '';
+    console.log(`  - ${path.relative(ROOT, row.ledger)}: ${row.viability}${missing}${asked}`);
   }
   const stale = report.hygiene.filter((row) => row.issues.length);
   if (stale.length) {
@@ -194,3 +219,9 @@ if (jsonOut) {
 }
 
 process.exit(report.ok ? 0 : 1);
+}
+
+main().catch((error) => {
+  console.error(`Ariadne DAFO audit failed: ${error.message}`);
+  process.exitCode = 1;
+});

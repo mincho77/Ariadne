@@ -907,6 +907,10 @@ Para ejecutar una cola concreta sin instalar otro LaunchAgent:
 npm run queue:bugs -- project-demo
 ```
 
+## Señales DAFO con JEV (optativo)
+
+La evaluación DAFO puede recibir señales estructuradas de JEV si cada instalación lo habilita explícitamente. Consulta [JEV opcional](docs/jev-opcional.md); Ariadne sigue funcionando sin clave ni llamadas externas cuando la opción está apagada.
+
 ## Gantt integrado
 
 Planificador multiproyecto sobre el mismo backlog Markdown. Programa **AH-E-9 … AH-E-29** cerrado; ledger en `docs/plans/ariadne-gantt.md`.

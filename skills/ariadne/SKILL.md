@@ -1,6 +1,6 @@
 ---
 name: ariadne
-description: Maintain durable, auditable execution plans so requirements, discoveries, dependencies, decisions, deferred work, and verification never get lost across long or deep work. Use when the user asks to create, execute, resume, audit, update, or close a multi-step plan; asks what remains; says work is getting lost; or wants clear project follow-up across sessions or repositories.
+description: Maintain durable, auditable project plans and perform project-level DAFO audits through conversation. Use when the user asks to create, execute, resume, audit, update, or close a plan, asks what remains, or requests an Ariadne audit, correction, or deployment workflow.
 ---
 
 # Ariadne
@@ -8,6 +8,45 @@ description: Maintain durable, auditable execution plans so requirements, discov
 Keep one durable Markdown ledger as source of truth. Chat plans are summaries, never the only record.
 
 Goal: no Ariadne project advances blocked tasks or loses evidence between sessions.
+
+## Conversational project audit (DAFO)
+
+When the user writes a natural-language request such as “Ariadne, audita”, “Ariadne, audita y corrige”, or “Ariadne, audita, corrige y despliega”, handle the audit in the conversation. Do not make the user run a terminal command or pass `--interactive` unless they explicitly ask for CLI use.
+
+- The DAFO is about the **whole active project**, not the Ariadne Hub implementation, an individual task, or the current ledger by itself. Use the active project/repository context. If multiple projects are plausible and there is no clear active project pointer, ask which one before analyzing.
+- Read the project's existing ledger, goals, README/product description, backlog, repository structure, and relevant code/configuration. Ground each DAFO factor in that project's evidence; label assumptions and unknown external conditions instead of presenting them as facts.
+- Assess internal strengths and weaknesses, external opportunities and threats, then give a project-level viability judgment with reasons, key dependencies, and conditions. Use `viable`, `viable con condiciones`, `no viable`, or `evidencia insuficiente` (or clear English equivalents). Do not use a numeric score or pretend code health alone establishes business viability.
+- If the goal, intended users, success criteria, scope, constraints, or external assumptions are unclear in a way that could change the DAFO or viability judgment, ask focused questions in chat before finalizing it. Ask only what is material, group related questions, and wait for answers before resolving those uncertainties. If the user does not know, retain the uncertainty and lower the confidence/judgment accordingly.
+- A request to audit alone is read-only: report the DAFO in chat and do not create or edit a ledger just to store it. If the user also asks to correct, that authorizes in-scope corrections after findings are clear; ask before resolving material product/design choices. Record decisions and evidence in the ledger when the requested correction/workflow includes plan updates.
+- For a request that includes deployment, audit first and deploy only when the existing deployment gates are satisfied and the target is clear. Ask in chat if the target or a material deployment choice is ambiguous; never infer production readiness from local completion.
+- The CLI `npm run ariadne:audit` remains a deterministic ledger/Gantt integrity check. It is not the conversational, whole-project DAFO. Do not substitute the CLI report for the project-level analysis.
+
+## Autonomous development cycle for Enhancement tasks
+
+When the user asks to develop, implement, build, or execute a registered Enhancement (`E`) task, run this workflow in the current conversation. A Hub-generated improvement run packet also carries these instructions; the task card and ledger remain the durable source of scope and evidence.
+
+1. Read the project ledger, task card and history, acceptance criteria, dependencies, repository guidance, and relevant implementation. Confirm dependencies are ready. Before editing, record a concise plan and verification commands in the task/ledger.
+2. Ask only about missing decisions that could materially change scope, architecture, UX, security, or acceptance. Otherwise proceed autonomously within the task's criteria.
+3. Implement, run focused checks then required project gates, inspect the diff, and verify each acceptance criterion. For UI work, inspect the rendered result and responsive behavior; for every change, review functional behavior and regressions.
+4. Run an adversarial review in a separate context where the host supports it. Give the reviewer the goal, criteria, diff, and evidence; require findings with severity, location, reproduction, and unmet criterion. The reviewer does not edit or expand scope. If no independent reviewer/model is available, label the review non-independent.
+5. Fix in-scope findings and repeat build, checks, diff review, and arbitration up to `ARIADNE_ENHANCEMENT_MAX_CYCLES` (default 5, valid range 1–20). PASS requires verified mandatory criteria and zero open BLOCK findings. At the limit, report BLOCKED with unresolved findings; never call exhaustion a pass.
+6. Use the task's recommended cheap/capable tier only through a model selector or backend that is already installed, authorized, and configured. A prompt or `modelHint` is a recommendation and cannot change the active ChatGPT/Codex model by itself. With no usable router, keep the current model and state that plainly; do not call a new API, enable JEV, or silently switch providers. Honor an explicit user override.
+7. Record tier/model/backend and selection reason when available, each cycle's reviewer verdict and finding closure, commands/results, changed files, remaining risks, and next action. Never deploy, publish, merge, or mark Done without explicit authorization and evidence.
+
+### Optional JEV signals
+
+- JEV is opt-in per Ariadne Hub installation. Check `GET http://127.0.0.1:4177/api/jev/status`; use it only when both `enabled` and `configured` are true. If the Hub is unavailable, JEV is off, or no key is configured, continue the normal DAFO without JEV.
+- After required context questions are answered, send only the allowlisted state fields to `POST /api/projects/<slug>/jev/dafo` on the local Hub. Never send repository files, arbitrary code, secrets, or environment variables. The Hub redacts some common credential patterns but cannot guarantee secret detection; keep the payload minimal.
+- If the endpoint returns `insufficient_context`, ask the user for the missing fields before retrying. On provider/network errors, continue the DAFO without JEV signals and do not retry automatically.
+- Treat returned scores, probabilities, and confidence as separate model signals. For each signal, name the dimension and relate it only to the supplied evidence; if the endpoint provides no supporting evidence for a score, say so. If confidence is low or signals conflict, call that out and ask for human review or clarifying context; never infer viability from it. JEV does not author the SWOT/DAFO or decide project viability. Ground the final factors in project evidence, explain uncertainty, and make the viability judgment yourself with human review.
+
+### Choosing where to start
+
+- When the user asks which development task to start first (for example, “revisa el backlog y dime por dónde empezar”), inspect only the active project's open backlog. If the user names candidate task IDs, pass those; otherwise let the local Hub select up to five open tasks by the board's current priority/order.
+- Check `GET /api/jev/status` and use `POST /api/projects/<slug>/jev/start-task` only when JEV is enabled and configured. Send `{}` to compare the Hub-selected slate, or `{ "candidateIds": ["...", "..."] }` for two to five user-selected IDs. The Hub reads only each candidate's ID, title, status, priority, type, short description, acceptance criteria, and dependency references; it does not send source files or code.
+- The endpoint excludes tasks with unresolved or unfinished blocking dependencies before sending anything to TypeSafe. It also caps the comparison at five and returns `insufficient_candidates` or `insufficient_context` without a provider call when appropriate. Ask the user to clarify the missing task context, then retry only after the user answers or updates the task details.
+- Treat `preferred` as JEV's choice signal, not an automatic winner. Compare the per-task value/alignment, implementation readiness, dependency readiness, and risk/effort signals with actual backlog evidence and explain tradeoffs, confidence, and probabilities. If the Hub/JEV is unavailable or disabled, provide the normal conversational comparison without JEV.
+- Never change status, reorder a queue, or authorize a task from this recommendation. Ask the user which task they want to start; perform a board change only after explicit authorization.
 
 ## Route lite vs full (Cursor)
 

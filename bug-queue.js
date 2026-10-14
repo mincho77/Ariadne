@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  buildEnhancementCycleInstruction,
+  recommendEnhancementTier,
+} = require('./swarm/enhancement-cycle');
+
 function queuedLaneTasks(tasks, laneFilter) {
   return tasks.filter(
     (task) => task.status.toLowerCase() === 'queued' && laneFilter(task),
@@ -71,24 +76,13 @@ function improvementQueueState(tasks, isImprovementTask) {
   return laneQueueState(tasks, isImprovementTask);
 }
 
-function buildImprovementRunInstruction(task, project) {
-  const lines = [
-    `Atiende ${task.id}: ${task.title}`,
-    '',
-    'Implementa la mejora en el repositorio del proyecto, prueba los cambios y documenta evidencia (## Evidence / ## Closeout).',
-    'Solo si no hay bugs abiertos con mayor prioridad. Audita con Pharos antes de Done.',
-    'Al terminar: marca Done con evidencia (`npm run queue:complete -- <project> <id> "<evidencia>"`).',
-    '',
-    `Proyecto: ${project.name} (${project.slug})`,
-    `Ruta: ${project.path}`,
-  ];
-  if (task.file) lines.push(`Backlog: backlog/${task.file}`);
-  lines.push('', `Swarm: npm run swarm -- run --project ${project.slug} --task ${task.id}`);
-  return lines.join('\n');
+function buildImprovementRunInstruction(task, project, options = {}) {
+  return buildEnhancementCycleInstruction(task, project, options);
 }
 
-function improvementRunPacket(task, project) {
-  const instruction = buildImprovementRunInstruction(task, project);
+function improvementRunPacket(task, project, options = {}) {
+  const instruction = buildImprovementRunInstruction(task, project, options);
+  const routing = recommendEnhancementTier(task, options);
   return {
     id: task.id,
     title: task.title,
@@ -98,6 +92,8 @@ function improvementRunPacket(task, project) {
     lane: 'mejoras',
     project: project.slug,
     projectPath: project.path,
+    modelTier: routing.tier,
+    modelTierReason: routing.reason,
     instruction,
     claimedAt: new Date().toISOString(),
   };

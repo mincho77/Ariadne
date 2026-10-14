@@ -28,7 +28,7 @@ estimate_days: 1
   return catalogPath;
 }
 
-test('ariadne-audit-all passes without bundled ledgers', () => {
+test('ariadne-audit-all passes with bundled ledgers and a sandbox catalog', () => {
   const catalogPath = createSandboxCatalog();
   const result = spawnSync(process.execPath, ['scripts/ariadne-audit-all.js', '--json'], {
     cwd: ROOT,
@@ -40,7 +40,8 @@ test('ariadne-audit-all passes without bundled ledgers', () => {
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.ledgerSummary.count, 0);
+  assert.ok(report.ledgerSummary.count >= 0);
+  assert.equal(report.ledgerSummary.failed, 0);
   assert.equal(report.ok, true);
   assert.ok(report.ledgers.every((row) => row.ok));
   assert.ok(Array.isArray(report.hygiene));

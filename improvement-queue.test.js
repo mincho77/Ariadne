@@ -25,9 +25,11 @@ ordinal: 10
 demo
 `, 'utf8');
   const project = { slug: 'fixture', name: 'Fixture', path: root, taskCode: 'AH' };
-  const packet = buildRunPacketForTask(project, 'AH-E-99');
+  const packet = buildRunPacketForTask(project, 'AH-E-99', { tier: 'cheap', maxCycles: 2 });
   assert.equal(packet.lane, 'mejoras');
   assert.equal(packet.id, 'AH-E-99');
+  assert.equal(packet.modelTier, 'cheap');
+  assert.match(packet.instruction, /Límite: 2 ciclos/);
   assert.match(packet.instruction, /swarm -- run --project fixture --task AH-E-99/);
   assert.ok(fs.existsSync(path.join(root, '.ariadne', 'mejoras-queue', 'current.md')));
   assert.ok(fs.existsSync(path.join(root, '.ariadne', 'run-packets', 'AH-E-99.md')));

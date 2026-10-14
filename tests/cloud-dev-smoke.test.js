@@ -79,6 +79,8 @@ test('cloud dev smoke: hub APIs and gantt stack over HTTP', { timeout: 30000 }, 
       ARIADNE_HUB_PORT: String(port),
       ARIADNE_BOARD_PORT: String(port),
       ARIADNE_CATALOG_PATH: catalogPath,
+      ARIADNE_JEV_ENABLED: 'false',
+      TYPESAFE_API_KEY: '',
     },
     stdio: 'ignore',
   });
@@ -91,6 +93,36 @@ test('cloud dev smoke: hub APIs and gantt stack over HTTP', { timeout: 30000 }, 
     const list = await projects.json();
     assert.ok(Array.isArray(list));
     assert.equal(list[0].slug, 'cloud-demo');
+
+    const jevStatus = await fetch(`http://127.0.0.1:${port}/api/jev/status`);
+    assert.equal(jevStatus.status, 200);
+    assert.equal((await jevStatus.json()).enabled, false);
+    const jevSkipped = await fetch(`http://127.0.0.1:${port}/api/projects/cloud-demo/jev/dafo`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ state: { objective: 'Do not send while disabled.' } }),
+    });
+    assert.equal(jevSkipped.status, 200);
+    assert.equal((await jevSkipped.json()).reason, 'provider_disabled');
+    const jevStartTaskSkipped = await fetch(`http://127.0.0.1:${port}/api/projects/cloud-demo/jev/start-task`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(jevStartTaskSkipped.status, 200);
+    assert.equal((await jevStartTaskSkipped.json()).reason, 'provider_disabled');
+    const crossOriginJevStartTask = await fetch(`http://127.0.0.1:${port}/api/projects/cloud-demo/jev/start-task`, {
+      method: 'POST',
+      headers: { origin: 'https://untrusted.example', 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(crossOriginJevStartTask.status, 403);
+    const crossOriginJev = await fetch(`http://127.0.0.1:${port}/api/projects/cloud-demo/jev/dafo`, {
+      method: 'POST',
+      headers: { origin: 'https://untrusted.example', 'content-type': 'application/json' },
+      body: JSON.stringify({ state: {} }),
+    });
+    assert.equal(crossOriginJev.status, 403);
 
     const hubConfig = await fetch(`http://127.0.0.1:${port}/api/hub-config`);
     assert.equal(hubConfig.status, 200);

@@ -98,6 +98,7 @@ const { buildHubGanttMetrics } = require('./lib/gantt/hub-metrics');
 const { readResourceConfig } = require('./lib/gantt/resources');
 const { runWhatIfScenario } = require('./lib/gantt/what-if');
 const { buildGanttPortfolio } = require('./lib/gantt/portfolio');
+const { getJevStatus, evaluateDafoReadiness, evaluateTaskStartOptions, JevError } = require('./lib/jev');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
@@ -195,6 +196,40 @@ function taskDetail(source) {
     .replace(/^## /gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function markdownTaskSection(source, heading) {
+  const lines = String(source || '').split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
+  if (start < 0) return '';
+  const endOffset = lines.slice(start + 1).findIndex((line) => /^##\s+/.test(line.trim()));
+  const end = endOffset < 0 ? lines.length : start + 1 + endOffset;
+  return lines.slice(start + 1, end).join('\n')
+    .replace(/<!--[^]*?-->/g, '')
+    .replace(/\r/g, '')
+    .trim();
+}
+
+function taskOptionContext(task) {
+  const description = markdownTaskSection(task.source, 'Description')
+    .split('\n').map((line) => line.trim()).filter(Boolean).join(' ').slice(0, 1800);
+  const criteriaSection = markdownTaskSection(task.source, 'Acceptance Criteria');
+  const acceptanceCriteria = criteriaSection.split('\n')
+    .map((line) => line.match(/^\s*[-*]\s+(?:\[[ xX]\]\s*)?(?:#\d+\s*)?(.+?)\s*$/)?.[1])
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((line) => line.slice(0, 300));
+  const dependencies = getFrontmatterList(task.source, 'dependencies').slice(0, 10);
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    type: task.type,
+    description,
+    acceptanceCriteria,
+    dependencies,
+  };
 }
 
 function projectTasks(project) {
@@ -342,6 +377,32 @@ function json(res, status, body) {
 
 function body(req) {
   return new Promise((resolve, reject) => { let data = ''; req.on('data', (chunk) => { data += chunk; }); req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (error) { reject(error); } }); req.on('error', reject); });
+}
+
+function boundedJsonBody(req, maxBytes = 16000) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    let size = 0;
+    let tooLarge = false;
+    req.on('data', (chunk) => {
+      size += Buffer.byteLength(chunk);
+      if (size > maxBytes) {
+        tooLarge = true;
+        return;
+      }
+      data += chunk;
+    });
+    req.on('end', () => {
+      if (tooLarge) {
+        reject(new JevError('REQUEST_TOO_LARGE', 'El contexto supera el tamaño máximo permitido.', 413));
+        return;
+      }
+      try { resolve(data ? JSON.parse(data) : {}); } catch {
+        reject(new JevError('INVALID_JSON', 'El cuerpo de la solicitud debe ser JSON válido.', 400));
+      }
+    });
+    req.on('error', (error) => reject(error));
+  });
 }
 
 function aiCapacityConfigPath(project) {
@@ -1229,7 +1290,7 @@ async function claimNextImprovement(project) {
   return improvementRunPacket(task, project);
 }
 
-function buildRunPacketForTask(project, taskId) {
+function buildRunPacketForTask(project, taskId, options = {}) {
   const task = findTask(project, taskId);
   if (!task) throw new Error('tarea no encontrada');
   const status = String(task.status || '').toLowerCase();
@@ -1241,7 +1302,7 @@ function buildRunPacketForTask(project, taskId) {
     const runFile = writeBugRunPacket(project, packet);
     return { ...packet, runFile };
   }
-  const packet = improvementRunPacket(task, project);
+  const packet = improvementRunPacket(task, project, options);
   const runFile = writeImprovementRunPacket(project, packet);
   return { ...packet, runFile };
 }
@@ -1488,6 +1549,115 @@ async function handle(req, res) {
   }
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   if (req.method === 'GET' && url.pathname === '/api/projects') return json(res, 200, readCatalog().map(summarize));
+  if (req.method === 'GET' && url.pathname === '/api/jev/status') {
+    const status = getJevStatus();
+    return json(res, 200, { ...status, provider: 'typesafe' });
+  }
+  const jevDafo = url.pathname.match(/^\/api\/projects\/([^/]+)\/jev\/dafo$/);
+  if (req.method === 'POST' && jevDafo) {
+    const origin = String(req.headers.origin || '');
+    const allowedOrigins = new Set([`http://${HOST}:${PORT}`, `http://localhost:${PORT}`]);
+    if (origin && !allowedOrigins.has(origin)) {
+      return json(res, 403, { error: 'cross-origin JEV requests are not allowed', code: 'ORIGIN_NOT_ALLOWED' });
+    }
+    const project = readCatalog().find((item) => item.slug === jevDafo[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (!getJevStatus().enabled) {
+      return json(res, 200, { enabled: false, skipped: true, reason: 'provider_disabled', project: project.slug });
+    }
+    try {
+      const data = await boundedJsonBody(req);
+      const report = await evaluateDafoReadiness(data.state);
+      return json(res, 200, { ...report, project: project.slug });
+    } catch (error) {
+      const status = error instanceof JevError ? error.status : 400;
+      const code = error instanceof JevError ? error.code : 'INVALID_REQUEST';
+      return json(res, status, { error: error.message, code });
+    }
+  }
+  const jevTaskStart = url.pathname.match(/^\/api\/projects\/([^/]+)\/jev\/start-task$/);
+  if (req.method === 'POST' && jevTaskStart) {
+    const origin = String(req.headers.origin || '');
+    const allowedOrigins = new Set([`http://${HOST}:${PORT}`, `http://localhost:${PORT}`]);
+    if (origin && !allowedOrigins.has(origin)) {
+      return json(res, 403, { error: 'cross-origin JEV requests are not allowed', code: 'ORIGIN_NOT_ALLOWED' });
+    }
+    const project = readCatalog().find((item) => item.slug === jevTaskStart[1]);
+    if (!project) return json(res, 404, { error: 'project not found' });
+    if (!getJevStatus().enabled) {
+      return json(res, 200, { enabled: false, skipped: true, reason: 'provider_disabled', project: project.slug });
+    }
+    try {
+      const data = await boundedJsonBody(req);
+      if (!data || typeof data !== 'object' || Array.isArray(data)
+        || Object.keys(data).some((key) => key !== 'candidateIds')) {
+        return json(res, 400, { error: 'Only candidateIds are accepted.', code: 'INVALID_REQUEST' });
+      }
+      const tasks = projectTasks(project);
+      const activeTasks = tasks.filter((task) => task.file.startsWith(`tasks/`)
+        && task.id && ['to do', 'queued'].includes(String(task.status).toLowerCase()));
+      const byId = new Map(activeTasks.map((task) => [String(task.id).toLowerCase(), task]));
+      let candidates;
+      if (data.candidateIds != null) {
+        if (!Array.isArray(data.candidateIds) || data.candidateIds.length < 2
+          || data.candidateIds.length > 5
+          || data.candidateIds.some((id) => typeof id !== 'string' || !id.trim())
+          || new Set(data.candidateIds.map((id) => id.trim().toLowerCase())).size !== data.candidateIds.length) {
+          return json(res, 400, { error: 'candidateIds must contain between 2 and 5 unique task IDs.', code: 'INVALID_CANDIDATES' });
+        }
+        const missing = data.candidateIds.filter((id) => !byId.has(id.trim().toLowerCase()));
+        if (missing.length) {
+          return json(res, 400, { error: 'Every candidate must be an open task in this project.', code: 'CANDIDATE_NOT_OPEN' });
+        }
+        candidates = data.candidateIds.map((id) => byId.get(id.trim().toLowerCase()));
+      } else {
+        candidates = sortTasksByPriority(activeTasks);
+      }
+
+      const excluded = [];
+      const eligible = [];
+      for (const task of candidates) {
+        const gate = dependencyGateForTask(task, tasks);
+        if (gate.blocking.length) {
+          excluded.push({
+            id: task.id,
+            title: task.title,
+            reason: 'blocking_dependencies',
+            dependencies: gate.blocking.map((item) => ({ id: item.id, status: item.status || null, reason: item.reason })),
+          });
+        } else {
+          eligible.push(task);
+        }
+      }
+      const selected = eligible.slice(0, 5);
+      if (selected.length < 2) {
+        return json(res, 200, {
+          enabled: true,
+          skipped: true,
+          reason: 'insufficient_candidates',
+          project: project.slug,
+          minimumCandidates: 2,
+          eligibleCount: selected.length,
+          excluded,
+        });
+      }
+      const report = await evaluateTaskStartOptions({
+        projectName: project.name,
+        options: selected.map(taskOptionContext),
+      });
+      return json(res, 200, {
+        ...report,
+        project: project.slug,
+        candidateLimit: 5,
+        candidatesTruncated: eligible.length > selected.length,
+        excluded,
+      });
+    } catch (error) {
+      const status = error instanceof JevError ? error.status : 400;
+      const code = error instanceof JevError ? error.code : 'INVALID_REQUEST';
+      return json(res, status, { error: error.message, code });
+    }
+  }
   if (req.method === 'GET' && url.pathname === '/api/hoy') {
     try {
       const snapshot = buildHoySnapshot(readCatalog(), {
@@ -1968,7 +2138,10 @@ async function handleBoard(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/queue/packet') {
     try {
       const data = await body(req);
-      const packet = buildRunPacketForTask(project, data.id);
+      const packet = buildRunPacketForTask(project, data.id, {
+        tier: data.modelTier,
+        maxCycles: data.maxCycles,
+      });
       return json(res, 200, packet);
     } catch (error) {
       return json(res, 400, { error: error.message });
