@@ -503,6 +503,61 @@ input {
 
 .nav-link:hover { text-decoration: underline; }
 
+.help-guide {
+  margin-top: 16px;
+  max-width: 700px;
+}
+
+.help-guide summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.help-guide summary:hover { border-color: #77777b; }
+.help-guide summary:focus-visible { outline: 2px solid var(--mejoras); outline-offset: 3px; }
+.help-guide[open] summary { margin-bottom: 10px; }
+
+.help-content {
+  max-width: 680px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.help-content p,
+.help-content li {
+  color: #c7c7cc;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.help-content > p { margin: 0 0 12px; }
+.help-content ul { display: grid; gap: 12px; margin: 0; padding-left: 20px; }
+.help-content li strong { display: block; margin-bottom: 4px; color: var(--text); }
+.help-content code {
+  display: block;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: #111113;
+  color: #e5e5ea;
+  font-family: inherit;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.help-content .help-codex { margin: 14px 0 0; color: var(--muted); }
+.help-content .help-codex code { display: inline; padding: 2px 5px; }
+
 .portfolio-summary { margin-bottom: 24px; }
 
 .portfolio-kpis {
@@ -549,4 +604,3 @@ input {
   color: var(--muted);
   font-weight: 600;
 }
-
