@@ -23,6 +23,11 @@ test('agent environment excludes credentials unless variable names are explicitl
   }
 });
 
+test('invoke tolerates a command that exits before consuming stdin', async () => {
+  const { invoke } = require('../scripts/ariadne-enhancement-cycle');
+  assert.equal(await invoke([process.execPath, '-e', 'process.exit(0)'], { input: 'prompt' }), '');
+});
+
 test('known model CLIs must explicitly select the model recorded in the ledger', () => {
   assert.doesNotThrow(() => assertConfiguredModelIdentity({ identity: 'codex:gpt-6-luna', command: ['codex', 'exec', '--model', 'gpt-6-luna'] }, 'cheap'));
   assert.throws(() => assertConfiguredModelIdentity({ identity: 'codex:gpt-6.1-sol', command: ['codex', 'exec', '--model', 'gpt-6-luna'] }, 'strong'), /identity debe coincidir/);

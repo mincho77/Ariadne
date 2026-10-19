@@ -197,6 +197,16 @@ function invoke(command, { cwd, input = '', timeoutMs = DEFAULT_TIMEOUT_MS, maxO
     };
     child.stdout.on('data', collect);
     child.stderr.on('data', collect);
+    // Fast commands can exit before stdin finishes flushing. EPIPE means the
+    // child closed its input; the close handler below still decides success.
+    child.stdin.on('error', (error) => {
+      if (error.code === 'EPIPE') return;
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill('SIGTERM');
+      reject(error);
+    });
     child.on('error', (error) => {
       if (settled) return;
       settled = true;
