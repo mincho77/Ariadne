@@ -31,6 +31,7 @@
     "queue:bugs": "node scripts/bug-queue-runner.js",
     "queue:complete": "node scripts/queue-complete.js",
     "queue:packet": "node scripts/queue-packet.js",
+    "enhancement:run": "node scripts/ariadne-enhancement-cycle.js",
     "hub:launchagent": "node scripts/install-hub-launchagent.js",
     "task:import:improvements": "node scripts/import-improvements.js",
     "task:migrate": "node scripts/migrate-task-ids.js",

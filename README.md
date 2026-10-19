@@ -989,3 +989,22 @@ Detalles completos en [CONTRIBUTING.md](CONTRIBUTING.md).
 ## 📄 Licencia
 
 Ariadne está bajo licencia **MIT**. Ver [LICENSE](LICENSE) para detalles.
+## Ejecutar un ciclo autónomo para una mejora
+
+AH-E-38 agrega un flujo optativo de planificación, implementación, verificaciones y arbitraje iterativo para tareas `E`. Requiere CLIs/modelos ya instalados y configurados en cada máquina; Ariadne no añade API keys ni activa proveedores por su cuenta.
+
+En el proyecto que vas a desarrollar:
+
+1. Coloca la tarea de mejora en `backlog/tasks/` y muévela a `In Progress`.
+2. Crea `.ariadne/enhancement-cycle.json` copiando [`docs/enhancement-cycle-config.example.json`](docs/enhancement-cycle-config.example.json), agrega `.ariadne/enhancement-cycle.json` a `.gitignore` (el runner lo valida) y configura los modelos económico y capaz, un árbitro con identidad distinta, y los comandos de verificación permitidos. Nunca pongas valores de claves en el JSON; si un CLI requiere una variable, lista solo su nombre en `allowEnv` para ese rol.
+3. Desde el chat abierto en el proyecto, pide que Ariadne ejecute el ciclo indicando el ID E; el agente usa el runner con la ruta del proyecto. Desde terminal, invócalo así:
+
+   En conversación puedes decir: **“Ariadne, ejecuta la mejora JM-E-12 de este proyecto con planificación, implementación, pruebas y árbitro adversarial hasta PASS o BLOCKED.”**
+
+   ```bash
+   npm --prefix /ruta/a/Ariadne run enhancement:run -- --project-path /ruta/al/proyecto --task JM-E-12
+   ```
+
+   Puedes fijar `--tier cheap|strong` y `--max-cycles 1..20`.
+
+Ariadne persiste el plan, preguntas, modelos, pruebas, dictámenes y hallazgos en la tarjeta. Pregunta antes de editar si el plan encuentra una decisión material pendiente. Solo informa `PASS` cuando los criterios estén verificados, todos los comandos configurados terminen bien y el árbitro no encuentre bloqueos. Al agotar iteraciones queda `BLOCKED`; no despliega, publica, fusiona ni marca Done. Requiere Git limpio salvo cambios en la tarjeta seleccionada. Sin configuración local no invoca ningún modelo. Los procesos solo reciben variables base; para transferir otra variable, agrega su nombre a `allowEnv` en el rol o verificación correspondiente.

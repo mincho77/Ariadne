@@ -244,6 +244,18 @@ Local-only; the Hub does not publish project data.
 8. Run `scripts/check_plan.py <ledger>` after material updates.
 9. If using Backlog.md, run its task/status commands after each state transition and copy the result into ledger evidence.
 
+## Autonomous Enhancement cycle (AH-E-38)
+
+When the user explicitly asks to develop/execute a backlog Enhancement task iteratively with an adversarial arbiter:
+
+1. Resolve the active project from the current repository/chat. Require the exact task ID; do not substitute Ariadne's own task ID when working in another project.
+2. Confirm the task is `In Progress`, its dependencies are Done, and the project has `.ariadne/enhancement-cycle.json`. This file is machine-local and must not be committed. If it is missing, explain how to copy `docs/enhancement-cycle-config.example.json` and configure the user's installed model CLIs; do not choose an unconfigured provider.
+3. Resolve the Ariadne runner repository separately from the active target project, using the local Hub catalog entry with slug `ariadne` (or the configured Ariadne repository path). Invoke `npm --prefix <resolved Ariadne repo> run enhancement:run -- --project-path <active project path> --task <E task ID>`, passing an explicit `--tier` or `--max-cycles` only when the user requests an override.
+4. The runner records a plan before edits. If it returns `NEEDS_INPUT`, ask those questions and wait; do not bypass them. The runner only returns `PASS` after configured checks succeed and a separately identified arbiter verifies the acceptance criteria. `BLOCKED` remains open and must not be described as complete.
+5. Review the final diff and durable task log with the user. Never deploy, publish, merge, or mark Done as an implied consequence of the cycle.
+
+This feature invokes user-configured local CLI commands. A CLI may use its own authenticated account or provider according to the user's setup. Ariadne itself does not provision credentials or make fallback calls.
+
 ## Required Ledger Schema
 
 ```markdown
@@ -301,6 +313,16 @@ Allowed ledger task states:
 - Never delete completed or cancelled rows; history matters.
 
 ## Commands
+
+If the user invokes Ariadne without a concrete request (for example `$ariadne` by itself), show this short menu and let them choose in ordinary language:
+
+- **Auditar:** DAFO del proyecto completo y juicio de viabilidad.
+- **Planear:** definir una tarea nueva, criterios y dependencias.
+- **Ejecutar una mejora:** planificar, construir, probar y usar el árbitro hasta `PASS` o `BLOCKED`.
+- **Corregir y desplegar:** auditar primero y desplegar solo si el destino y los gates están claros.
+- **Ver estado:** resumir qué terminó, qué sigue y qué está bloqueado.
+
+Do not require memorized terminal commands. In Codex, users can invoke this skill with `$ariadne` or find it through `/skills`.
 
 - `ariadne plan` — create or normalize ledger.
 - `ariadne status` — report current gate, completed tasks, active task, blockers, next three tasks, new risks (nothing else unless asked).

@@ -1,0 +1,28 @@
+{
+  "maxCycles": 5,
+  "timeoutMs": 900000,
+  "agents": {
+    "planner": {
+      "identity": "codex:gpt-6.1-sol",
+      "readOnly": true,
+      "command": ["codex", "exec", "--sandbox", "read-only", "--model", "gpt-6.1-sol"]
+    },
+    "cheap": {
+      "identity": "codex:gpt-6-luna",
+      "command": ["codex", "exec", "--approve-for-me", "--sandbox", "workspace-write", "--model", "gpt-6-luna"]
+    },
+    "strong": {
+      "identity": "codex:gpt-6.1-sol",
+      "command": ["codex", "exec", "--approve-for-me", "--sandbox", "workspace-write", "--model", "gpt-6.1-sol"]
+    },
+    "arbiter": {
+      "identity": "codex:gpt-6-astra",
+      "readOnly": true,
+      "command": ["codex", "exec", "--sandbox", "read-only", "--model", "gpt-6-astra"],
+      "visualArgs": ["-i"]
+    }
+  },
+  "checks": [
+    { "name": "project tests", "command": ["npm", "test"] }
+  ]
+}
