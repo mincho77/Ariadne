@@ -1,12 +1,12 @@
 ---
-id: AH-E-34
+id: AH-E-5
 title: Documentar opt-in y configuración personal de JEV
 status: Done
 assignee: []
 created_date: '2026-10-03 08:52'
 updated_date: '2026-10-03 09:20'
 dependencies:
-  - AH-E-31:FS
+  - AH-E-2:FS
 labels:
   - jev
   - docs

@@ -1,5 +1,5 @@
 ---
-id: AH-E-32
+id: AH-E-3
 title: Exponer evaluación JEV con contexto permitido
 status: Done
 assignee: []
@@ -10,7 +10,7 @@ labels:
   - api
   - privacy
 dependencies:
-  - 'AH-E-31:FS'
+  - 'AH-E-2:FS'
 modified_files:
   - server.js
   - lib/jev.js

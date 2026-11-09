@@ -1,5 +1,5 @@
 ---
-id: AH-E-35
+id: AH-E-6
 title: Verificar seguridad y escenarios de evaluación JEV
 status: Done
 assignee: []
@@ -9,9 +9,9 @@ labels:
   - jev
   - verification
 dependencies:
-  - 'AH-E-32:FS'
-  - 'AH-E-33:FS'
-  - 'AH-E-34:FS'
+  - 'AH-E-3:FS'
+  - 'AH-E-4:FS'
+  - 'AH-E-5:FS'
 modified_files:
   - tests/jev.test.js
   - tests/cloud-dev-smoke.test.js
