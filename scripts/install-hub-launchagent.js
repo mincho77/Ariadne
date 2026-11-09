@@ -14,23 +14,26 @@ const {
 const ROOT = path.join(__dirname, '..');
 
 function usage() {
-  console.error(`Usage: node scripts/install-hub-launchagent.js [--dry-run] [--no-load] [--root <path>]
+  console.error(`Usage: node scripts/install-hub-launchagent.js [--dry-run] [--no-load] [--root <path>] [--catalog-path <path>] [--uninstall]
 
 Installs ~/Library/LaunchAgents/${HUB_PLIST_NAME} pointing at this repo,
-restarts any existing ${HUB_LABEL} service, and kickstarts it.
+restarts any existing ${HUB_LABEL} service, and kickstarts it. Use --uninstall to remove it.
 `);
   process.exit(1);
 }
 
 function parseArgs(argv) {
-  const args = { dryRun: false, load: true, root: ROOT };
+  const args = { dryRun: false, load: true, uninstall: false, root: ROOT, catalogPath: process.env.ARIADNE_CATALOG_PATH || '' };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') usage();
     if (arg === '--dry-run') args.dryRun = true;
+    else if (arg === '--uninstall') args.uninstall = true;
     else if (arg === '--no-load') args.load = false;
     else if (arg === '--root') {
       args.root = path.resolve(argv[++i] || '');
+    } else if (arg === '--catalog-path') {
+      args.catalogPath = path.resolve(argv[++i] || '');
     } else {
       usage();
     }
@@ -75,6 +78,19 @@ function bootoutLabel(label, { dryRun }) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = args.root;
+  const dir = agentsDir();
+  const hubTarget = path.join(dir, HUB_PLIST_NAME);
+
+  if (args.uninstall) {
+    console.log(`Hub label: ${HUB_LABEL}`);
+    console.log(`Plist: ${hubTarget}`);
+    bootoutLabel(HUB_LABEL, args);
+    if (args.dryRun) console.log(`[dry-run] remove ${hubTarget}`);
+    else if (fs.existsSync(hubTarget)) fs.rmSync(hubTarget);
+    console.log('Autoinicio de Ariadne eliminado. El catálogo local del proyecto se conservó.');
+    return;
+  }
+
   const serverPath = path.join(root, 'server.js');
   if (!fs.existsSync(serverPath)) {
     throw new Error(`server.js not found under ${root}`);
@@ -85,10 +101,8 @@ function main() {
     nodePath,
     serverPath,
     workingDirectory: root,
+    catalogPath: args.catalogPath,
   });
-
-  const dir = agentsDir();
-  const hubTarget = path.join(dir, HUB_PLIST_NAME);
 
   console.log(`Hub label: ${HUB_LABEL}`);
   console.log(`Node: ${nodePath}`);
@@ -101,7 +115,7 @@ function main() {
     console.log(`[dry-run] write ${hubTarget}\n${plistBody}`);
   } else {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(hubTarget, plistBody.endsWith('\n') ? plistBody : `${plistBody}\n`, 'utf8');
+    fs.writeFileSync(hubTarget, plistBody.endsWith('\n') ? plistBody : `${plistBody}\n`, { encoding: 'utf8', mode: 0o600 });
     console.log(`Wrote ${hubTarget}`);
   }
 

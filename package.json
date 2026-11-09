@@ -1,16 +1,45 @@
 {
-  "name": "ariadne",
+  "name": "ariadne-hub",
   "version": "0.1.0",
-  "private": true,
-  "description": "Local multi-project hub for Ariadne governance and Backlog.md",
+  "description": "A local-first project hub with Kanban, Gantt planning, and project audits",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/mincho77/Ariadne.git"
   },
   "type": "commonjs",
+  "bin": {
+    "ariadne-hub": "bin/ariadne-hub.js"
+  },
+  "files": [
+    "*.js",
+    "bin/",
+    "scripts/",
+    "lib/",
+    "swarm/",
+    "public/",
+    "docs/",
+    "skills/",
+    "backlog.config.yml",
+    "README.md",
+    "README.es.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "start": "node server.js",
+    "setup": "node scripts/ariadne-setup.js",
+    "doctor": "node scripts/ariadne-doctor.js",
+    "autostart": "node scripts/install-hub-autostart.js",
     "test": "node --test",
+    "test:install": "node --test tests/ariadne-onboarding.test.js tests/ariadne-autostart.test.js",
+    "package:check": "node scripts/check-npm-package.js",
+    "prepublishOnly": "npm run package:check && npm test",
     "lint": "node scripts/ariadne-lint.js",
     "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
     "gantt:audit": "node scripts/gantt-backlog-audit.js --all",
