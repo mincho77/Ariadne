@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const {
   renderSystemdUnit,
   renderWindowsStartupScript,
@@ -51,4 +52,12 @@ test('user service paths do not require administrator directories', () => {
   assert.equal(userConfigDirectory('/home/example', 'linux', { XDG_CONFIG_HOME: '/home/example/.config-test' }), '/home/example/.config-test');
   assert.equal(userConfigDirectory('C:\\Users\\example', 'win32', { APPDATA: 'C:\\Users\\example\\Roaming' }), 'C:\\Users\\example\\Roaming');
   assert.equal(userConfigDirectory('C:\\Users\\example', 'win32', {}), path.win32.join('C:\\Users\\example', 'AppData', 'Roaming'));
+});
+
+test('native autostart install and uninstall commands complete in dry-run mode', () => {
+  const script = path.resolve(__dirname, '..', 'scripts', 'install-hub-autostart.js');
+  for (const action of ['install', 'uninstall']) {
+    const result = spawnSync(process.execPath, [script, action, '--dry-run'], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
 });

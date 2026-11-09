@@ -4,7 +4,7 @@
 - Estado: implementación en curso
 - Última actualización: 2026-11-09
 - Objetivo: permitir que una persona instale, configure y abra Ariadne en macOS, Windows o Linux sin conocer comandos internos ni editar archivos de servicio a mano; preparar el proyecto para una futura distribución con `npx`.
-- Gate actual: setup y doctor implementados; suite y auditoría locales pasan. AH-E-39 y AH-E-40 están cerradas; AH-E-41 y AH-E-42 siguen en progreso mientras CI multiplataforma y nombre npm se verifican.
+- Gate actual: setup y doctor implementados; suite y auditoría locales pasan. AH-E-39 y AH-E-40 están cerradas; CI ya pasó en macOS/Windows/Linux. AH-E-41 sigue en progreso hasta repetir CI con cobertura nativa de simulación; AH-E-42 depende de confirmar el nombre npm.
 - Próxima acción: publicar PR para ejecutar la matriz multiplataforma y revisar cambios.
 
 ## Alcance
@@ -81,7 +81,7 @@ Contexto: evaluación del producto Ariadne completo, con foco en que personas nu
 |---|---|---|---|---|---|---|---|
 | AH-E-39 | Implementación | Asistente de primera instalación y registro guiado | hecho | — | Setup funciona en macOS/Windows/Linux; valida requisitos; registra rutas locales sin pérdida de catálogo; no requiere editar archivos a mano | Tarjeta cerrada con Backlog CLI; setup temporal, pruebas por SO y suite completa pasan | Completado; CI nativo también corre en el PR |
 | AH-E-40 | Diagnóstico | Comando doctor y diagnóstico accionable | hecho | AH-E-39 | Comando devuelve estado y solución concreta para requisitos, dependencias, catálogo, rutas, puertos y salud del Hub | Tarjeta cerrada por Backlog CLI; pruebas temporales, doctor secuencial y auditoría global sin problemas | Completado |
-| AH-E-41 | Operación | Autoinicio sin privilegios para macOS, Windows y Linux | en_progreso | AH-E-39 | Instalación, inspección, desinstalación y fallback manual en los tres sistemas | Renderizado y pruebas unitarias para los tres sistemas; matriz CI aún pendiente | Revisar resultado de la matriz multiplataforma |
+| AH-E-41 | Operación | Autoinicio sin privilegios para macOS, Windows y Linux | en_progreso | AH-E-39 | Instalación, inspección, desinstalación y fallback manual en los tres sistemas | CI previo pasa en los tres SO; se añadió prueba del instalador nativo en dry-run para install/uninstall (13/13 focalizadas), pendiente repetir matriz | Revisar CI con cobertura de dry-run |
 | AH-E-42 | Distribución | Preparación npm/npx y guías bilingües | en_progreso | AH-E-39, AH-E-40 | Ejecutable empaquetado, tarball inspeccionado, guía EN/ES y publicación npm pendiente de autorización | `package:check` pasa; `ariadne-cli` está ocupado; `ariadne-hub` no se pudo verificar por timeout del registro | Verificar nombre/propiedad con npm y revisar CI |
 
 ## Riesgos
@@ -119,4 +119,5 @@ Contexto: evaluación del producto Ariadne completo, con foco en que personas nu
 - 2026-11-09: consulta a npm para `ariadne-hub` agotó el tiempo; el nombre permanece como candidato sin verificación de disponibilidad/propiedad. No publicar hasta confirmarlo.
 - 2026-11-09: verificación final local: `npm test` 266/266; `smoke:cloud` 3/3; `smoke:lifecycle` 2/2; `lint` 76 archivos; `test:install` 12/12; `package:check` y `check_plan.py` pasan. `ariadne:audit` informa 0 problemas.
 - 2026-11-09: auditoría adversarial corrigió dos asuntos: doctor ahora distingue puertos ocupados de comprobaciones restringidas, y el ID local del ledger autónomo se alineó con la migración documentada (AH-E-38 → AH-E-9). Backlog doctor reparó una colisión local de ID en una tarjeta archivada; referencias de las nuevas tareas se revisaron y apuntan al AH-E-39 activo.
-- 2026-11-09: inicio automático, asistente y empaquetado están listos para revisión; la validación real en macOS/Windows/Linux queda delegada a la matriz CI del PR. No se ejecutó publicación en npm.
+- 2026-11-09: primera matriz CI del PR detectó rutas Windows con separadores del anfitrión; se corrigió con `path.win32`/`path.posix`, y la segunda matriz pasó en macOS/Windows/Linux. Se añadió comprobación del instalador nativo en dry-run para install/uninstall; la matriz debe repetirse con esta cobertura.
+- 2026-11-09: inicio automático, asistente y empaquetado están listos para revisión. No se ejecutó publicación en npm.
