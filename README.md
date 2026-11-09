@@ -16,7 +16,7 @@ npm run setup
 npm start
 ```
 
-The setup guide asks for the path to an existing project and opens the Hub at <http://127.0.0.1:4177/>. It records the path in a local catalog and does not change the project files.
+The setup guide asks for the path to an existing project and shows you how to open the Hub at <http://127.0.0.1:4177/>. It records the path in a local catalog and does not change the project files.
 
 - [Full installation guide](docs/INSTALLING.md)
 - [Guía de instalación en español](docs/instalacion.md)

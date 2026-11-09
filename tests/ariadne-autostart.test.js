@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const {
   renderSystemdUnit,
   renderWindowsStartupScript,
@@ -48,5 +49,6 @@ test('macOS LaunchAgent receives the selected local catalog path', () => {
 test('user service paths do not require administrator directories', () => {
   assert.equal(userConfigDirectory('/Users/example', 'darwin', {}), '/Users/example/Library/Application Support');
   assert.equal(userConfigDirectory('/home/example', 'linux', { XDG_CONFIG_HOME: '/home/example/.config-test' }), '/home/example/.config-test');
-  assert.match(userConfigDirectory('C:\\Users\\example', 'win32', { APPDATA: 'C:\\Users\\example\\Roaming' }), /Roaming/);
+  assert.equal(userConfigDirectory('C:\\Users\\example', 'win32', { APPDATA: 'C:\\Users\\example\\Roaming' }), 'C:\\Users\\example\\Roaming');
+  assert.equal(userConfigDirectory('C:\\Users\\example', 'win32', {}), path.win32.join('C:\\Users\\example', 'AppData', 'Roaming'));
 });

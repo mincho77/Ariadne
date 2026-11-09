@@ -14,7 +14,7 @@ npm run setup
 npm start
 ```
 
-La guía pregunta dónde está tu proyecto, lo agrega al catálogo local sin modificar sus archivos y abre el Hub en <http://127.0.0.1:4177/>. Requisitos: Git y Node.js 18 o posterior. Consulta [la guía completa](docs/instalacion.md).
+La guía pregunta dónde está tu proyecto, lo agrega al catálogo local sin modificar sus archivos y te indica cómo abrir el Hub en <http://127.0.0.1:4177/>. Requisitos: Git y Node.js 18 o posterior. Consulta [la guía completa](docs/instalacion.md).
 
 **Hub local multiproyecto** con Kanban, Gantt y auditoría Git. **Diseñado para agentes IA**: tu LLM puede crear tareas, leer queue, ejecutar en orden y marcar done automáticamente.
 

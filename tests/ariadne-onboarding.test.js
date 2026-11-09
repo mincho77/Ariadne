@@ -21,7 +21,7 @@ function tempDir() {
 
 test('user catalog defaults are isolated by operating system', () => {
   assert.equal(defaultUserCatalogPath({ platform: 'darwin', home: '/Users/test', env: {} }), '/Users/test/Library/Application Support/Ariadne/projects.json');
-  assert.equal(defaultUserCatalogPath({ platform: 'win32', home: 'C:\\Users\\test', env: { APPDATA: 'C:\\Users\\test\\Roaming' } }), path.join('C:\\Users\\test\\Roaming', 'Ariadne', 'projects.json'));
+  assert.equal(defaultUserCatalogPath({ platform: 'win32', home: 'C:\\Users\\test', env: { APPDATA: 'C:\\Users\\test\\Roaming' } }), path.win32.join('C:\\Users\\test\\Roaming', 'Ariadne', 'projects.json'));
   assert.equal(defaultUserCatalogPath({ platform: 'linux', home: '/home/test', env: { XDG_CONFIG_HOME: '/home/test/.config-test' } }), '/home/test/.config-test/ariadne/projects.json');
 });
 
