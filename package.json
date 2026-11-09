@@ -1,6 +1,6 @@
 {
   "name": "ariadne-hub",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local-first project hub with Kanban, Gantt planning, and project audits",
   "license": "MIT",
   "repository": {
