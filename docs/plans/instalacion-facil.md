@@ -4,7 +4,7 @@
 - Estado: implementación en curso
 - Última actualización: 2026-11-09
 - Objetivo: permitir que una persona instale, configure y abra Ariadne en macOS, Windows o Linux sin conocer comandos internos ni editar archivos de servicio a mano; preparar el proyecto para una futura distribución con `npx`.
-- Gate actual: setup y doctor implementados; suite y auditoría locales pasan. AH-E-39 y AH-E-40 están cerradas; CI ya pasó en macOS/Windows/Linux. AH-E-41 sigue en progreso hasta repetir CI con cobertura nativa de simulación; AH-E-42 depende de confirmar el nombre npm.
+- Gate actual: setup y doctor implementados; suite, auditoría y matriz CI pasan. AH-E-39 y AH-E-40 están cerradas; AH-E-41 sigue en progreso hasta probar instalación/desinstalación real del servicio en una sesión nativa; AH-E-42 depende de confirmar el nombre npm.
 - Próxima acción: publicar PR para ejecutar la matriz multiplataforma y revisar cambios.
 
 ## Alcance
@@ -73,7 +73,7 @@ Contexto: evaluación del producto Ariadne completo, con foco en que personas nu
 - Estado: viable con condiciones
 - Razones: la arquitectura existente ya tiene Hub HTTP, catálogo local y un instalador de macOS, así que el trabajo es incremental. El plan tiene una ruta de entrega comprobable y mantiene la operación local.
 - Condiciones: preservar datos locales; cubrir cada sistema en CI; entregar fallback manual; inspeccionar el tarball; verificar disponibilidad y propiedad del nombre npm; mantener la publicación npm como gate separado.
-- Evidencia: README, package.json, server.js, scripts/install-hub-launchagent.js, pruebas focalizadas 12/12 y comprobación del tarball.
+- Evidencia: README, package.json, server.js, scripts/install-hub-launchagent.js, pruebas focalizadas 13/13, suite 267/267 y comprobación del tarball.
 - No se evalúa como probada la viabilidad comercial ni la adopción externa: faltan entrevistas, métricas de instalación y uso.
 
 ## Registro maestro
@@ -81,7 +81,7 @@ Contexto: evaluación del producto Ariadne completo, con foco en que personas nu
 |---|---|---|---|---|---|---|---|
 | AH-E-39 | Implementación | Asistente de primera instalación y registro guiado | hecho | — | Setup funciona en macOS/Windows/Linux; valida requisitos; registra rutas locales sin pérdida de catálogo; no requiere editar archivos a mano | Tarjeta cerrada con Backlog CLI; setup temporal, pruebas por SO y suite completa pasan | Completado; CI nativo también corre en el PR |
 | AH-E-40 | Diagnóstico | Comando doctor y diagnóstico accionable | hecho | AH-E-39 | Comando devuelve estado y solución concreta para requisitos, dependencias, catálogo, rutas, puertos y salud del Hub | Tarjeta cerrada por Backlog CLI; pruebas temporales, doctor secuencial y auditoría global sin problemas | Completado |
-| AH-E-41 | Operación | Autoinicio sin privilegios para macOS, Windows y Linux | en_progreso | AH-E-39 | Instalación, inspección, desinstalación y fallback manual en los tres sistemas | CI previo pasa en los tres SO; se añadió prueba del instalador nativo en dry-run para install/uninstall (13/13 focalizadas), pendiente repetir matriz | Revisar CI con cobertura de dry-run |
+| AH-E-41 | Operación | Autoinicio sin privilegios para macOS, Windows y Linux | en_progreso | AH-E-39 | Instalación, inspección, desinstalación y fallback manual en los tres sistemas | Matriz CI pasa en macOS/Windows/Linux; 13/13 focalizadas con install/uninstall nativo en dry-run. No se alteró el inicio real de los runners | Verificar instalación/desinstalación real en sesiones limpias por SO |
 | AH-E-42 | Distribución | Preparación npm/npx y guías bilingües | en_progreso | AH-E-39, AH-E-40 | Ejecutable empaquetado, tarball inspeccionado, guía EN/ES y publicación npm pendiente de autorización | `package:check` pasa; `ariadne-cli` está ocupado; `ariadne-hub` no se pudo verificar por timeout del registro | Verificar nombre/propiedad con npm y revisar CI |
 
 ## Riesgos
@@ -90,7 +90,7 @@ Contexto: evaluación del producto Ariadne completo, con foco en que personas nu
 | INST-R-001 | Alta | El autoinicio deja procesos duplicados o configuraciones huérfanas | Operaciones por usuario, inspección antes de escribir, idempotencia y uninstall por sistema | Abierto |
 | INST-R-002 | Alta | El asistente altera un catálogo existente o registra el proyecto incorrecto | Copia de seguridad antes de cambios, escritura atómica, comparación de ruta real y no sobrescribir entradas | Abierto |
 | INST-R-003 | Alta | El tarball npm incluye información local o scripts no requeridos | `files` allowlist, `.npmignore`/`.gitignore` revisado, inspección de tarball y prueba de paquete | Abierto |
-| INST-R-004 | Media | CI local no puede ejecutar los tres sistemas | Matriz GitHub Actions con macOS/Windows/Linux y simulaciones locales | Abierto |
+| INST-R-004 | Media | CI local no puede ejecutar los tres sistemas | Matriz GitHub Actions con macOS/Windows/Linux y simulaciones locales | Mitigado: matriz verde; los servicios reales no se activaron en runners |
 | INST-R-005 | Media | Nombre o scope npm elegido no está disponible o no pertenece a la cuenta | Verificar disponibilidad antes de finalizar el paquete; publicación queda separada | Abierto |
 | INST-R-006 | Media | Primera instalación sigue pareciendo compleja por exceso de opciones | Camino recomendado con valores seguros, detalles avanzados opcionales y guías cortas | Abierto |
 
@@ -119,5 +119,6 @@ Contexto: evaluación del producto Ariadne completo, con foco en que personas nu
 - 2026-11-09: consulta a npm para `ariadne-hub` agotó el tiempo; el nombre permanece como candidato sin verificación de disponibilidad/propiedad. No publicar hasta confirmarlo.
 - 2026-11-09: verificación final local: `npm test` 266/266; `smoke:cloud` 3/3; `smoke:lifecycle` 2/2; `lint` 76 archivos; `test:install` 12/12; `package:check` y `check_plan.py` pasan. `ariadne:audit` informa 0 problemas.
 - 2026-11-09: auditoría adversarial corrigió dos asuntos: doctor ahora distingue puertos ocupados de comprobaciones restringidas, y el ID local del ledger autónomo se alineó con la migración documentada (AH-E-38 → AH-E-9). Backlog doctor reparó una colisión local de ID en una tarjeta archivada; referencias de las nuevas tareas se revisaron y apuntan al AH-E-39 activo.
-- 2026-11-09: primera matriz CI del PR detectó rutas Windows con separadores del anfitrión; se corrigió con `path.win32`/`path.posix`, y la segunda matriz pasó en macOS/Windows/Linux. Se añadió comprobación del instalador nativo en dry-run para install/uninstall; la matriz debe repetirse con esta cobertura.
+- 2026-11-09: primera matriz CI del PR detectó rutas Windows con separadores del anfitrión; se corrigió con `path.win32`/`path.posix`. La segunda matriz pasó en macOS/Windows/Linux; luego pasó de nuevo con la prueba de instalación/desinstalación nativa en dry-run. No se alteró el inicio real de los runners.
+- 2026-11-09: verificación actualizada: `npm test` 267/267, `test:install` 13/13, `smoke:cloud` 3/3, `smoke:lifecycle` 2/2, `lint` 76 archivos, `package:check`, `ariadne:audit` 0 problemas y matriz CI verde.
 - 2026-11-09: inicio automático, asistente y empaquetado están listos para revisión. No se ejecutó publicación en npm.

@@ -4,7 +4,7 @@ title: 'Autoinicio sin privilegios para macOS, Windows y Linux'
 status: In Progress
 assignee: []
 created_date: '2026-11-09T18:17:00Z'
-updated_date: '2026-11-09T18:57:00Z'
+updated_date: '2026-11-09T18:59:00Z'
 labels:
   - ariadne
   - install
@@ -35,4 +35,6 @@ Provide optional per-user auto-start installation and removal on macOS (LaunchAg
 Implementación lista; pruebas unitarias de render por SO pasan. Cierre pendiente de ejecución de CI en macOS, Windows y Linux.
 
 Se corrigieron rutas por sistema (Windows CI detectó el separador del anfitrión). Se añadió test nativo de install/uninstall en --dry-run: 13/13 pruebas focalizadas pasan; matriz anterior 3/3 SO verde, repetirla tras este cambio.
+
+Matriz CI completada con éxito en macOS, Windows y Linux, incluyendo install/uninstall nativo en --dry-run. No se alteró el inicio real de los runners; falta verificación de instalación/desinstalación real en sesiones nativas limpias.
 <!-- SECTION:NOTES:END -->
