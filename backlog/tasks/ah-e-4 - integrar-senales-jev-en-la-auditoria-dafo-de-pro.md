@@ -1,5 +1,5 @@
 ---
-id: AH-E-33
+id: AH-E-4
 title: Integrar señales JEV en la auditoría DAFO de proyecto
 status: Done
 assignee: []
@@ -9,10 +9,10 @@ labels:
   - jev
   - dafo
 dependencies:
-  - 'AH-E-32:FS'
+  - 'AH-E-3:FS'
 modified_files:
   - skills/ariadne/SKILL.md
-  - /Users/mauriciootalvaro/.codex/skills/ariadne/SKILL.md
+  - skill Ariadne instalado por el usuario
   - docs/jev-opcional.md
 priority: high
 type: enhancement

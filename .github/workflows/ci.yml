@@ -6,6 +6,25 @@ on:
   pull_request:
 
 jobs:
+  install-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install (ignore-scripts)
+        run: npm ci --ignore-scripts
+      - name: Onboarding and startup checks
+        run: npm run test:install
+      - name: Inspect npm package contents
+        run: npm run package:check
+
   test:
     runs-on: ubuntu-latest
     steps:

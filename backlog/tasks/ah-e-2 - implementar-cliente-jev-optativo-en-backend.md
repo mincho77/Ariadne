@@ -1,12 +1,12 @@
 ---
-id: AH-E-31
+id: AH-E-2
 title: Implementar cliente JEV optativo en backend
 status: Done
 assignee: []
 created_date: '2026-10-03 08:52'
 updated_date: '2026-10-03 09:20'
 dependencies:
-  - AH-E-30:FS
+  - AH-E-1:FS
 labels:
   - jev
   - backend

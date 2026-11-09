@@ -1,5 +1,5 @@
 ---
-id: AH-E-36
+id: AH-E-7
 title: Desplegar soporte JEV opcional en Hub local
 status: Done
 assignee: []
@@ -9,7 +9,7 @@ labels:
   - jev
   - local-deploy
 dependencies:
-  - 'AH-E-35:FS'
+  - 'AH-E-6:FS'
 modified_files:
   - server.js
   - lib/jev.js
@@ -39,7 +39,7 @@ Publicar el backend JEV y el flujo conversacional en el Hub local después de co
 <!-- COMMENTS:BEGIN -->
 created: 2026-10-03 15:03
 ---
-Desplegado 2026-10-03 en /Users/mauriciootalvaro/Code/Ariadne. LaunchAgent reiniciado con kickstart; GET status 200 enabled=false/configured=false y POST devuelve provider_disabled. Sin clave ni llamada externa.
+Desplegado 2026-10-03 en el repositorio local de Ariadne. LaunchAgent reiniciado con kickstart; GET status 200 enabled=false/configured=false y POST devuelve provider_disabled. Sin clave ni llamada externa.
 ---
 <!-- COMMENTS:END -->
 
