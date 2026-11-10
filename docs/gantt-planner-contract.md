@@ -92,7 +92,7 @@ Blocked tasks expose `forecastConfidence` and block metadata on `tasks[]`. See `
 
 ## External UI integration (AH-E-23)
 
-The editable Gantt diagram runs in a separate frontend (`localhost:63447` by default). Hub discovery: `GET /api/hub-config` (`ganttUi`, `ganttLaunchExample`) and `GET /api/gantt-ui-contract`. See `docs/gantt-ui-integration.md`. Smoke: `npm run gantt:smoke`.
+The editable Gantt diagram is bundled with the Hub under `/gantt/` on port 4177 by default. Hub discovery: `GET /api/hub-config` (`ganttUi`, `ganttLaunchExample`) and `GET /api/gantt-ui-contract`. See `docs/gantt-ui-integration.md`. Smoke: `npm run gantt:smoke`.
 
 ## Hub tracking metrics (AH-E-24)
 

@@ -1,6 +1,6 @@
 {
   "name": "ariadne-hub",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local-first project hub with Kanban, Gantt planning, and project audits",
   "license": "MIT",
   "repository": {
@@ -42,6 +42,7 @@
     "prepublishOnly": "npm run package:check && npm test",
     "lint": "node scripts/ariadne-lint.js",
     "gantt:smoke": "node --test tests/gantt-ui-smoke.test.js",
+    "gantt:build": "npm --prefix apps/gantt-ui run build -- --base-href /gantt/",
     "gantt:audit": "node scripts/gantt-backlog-audit.js --all",
     "smoke:cloud": "node --test tests/cloud-dev-smoke.test.js",
     "smoke:lifecycle": "node --test tests/two-project-lifecycle.test.js",

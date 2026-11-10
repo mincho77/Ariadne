@@ -186,5 +186,5 @@ test('cloud dev smoke: ariadne sync and launcher CLIs exit 0', () => {
     encoding: 'utf8',
   });
   assert.equal(launcher.status, 0, launcher.stderr);
-  assert.equal(JSON.parse(launcher.stdout).skill, 'ariadne-lite');
+  assert.equal(JSON.parse(launcher.stdout).skill, 'ariadne');
 });

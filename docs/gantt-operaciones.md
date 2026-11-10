@@ -65,7 +65,7 @@ El test `tests/gantt-perf.test.js` programa **1000 tareas** sintéticas y exige 
 | What-if | `docs/gantt-what-if.md` |
 | Portafolio | `docs/gantt-portfolio.md` |
 | Hub métricas | `docs/gantt-hub-metrics.md` |
-| UI externa | `docs/gantt-ui-integration.md` |
+| UI integrada | `docs/gantt-ui-integration.md` |
 | Ledger programa | `docs/plans/ariadne-gantt.md` |
 | Visión funcional | `docs/GANTT.md` |
 | Arquitectura | `docs/ARQUITECTURA.md` |

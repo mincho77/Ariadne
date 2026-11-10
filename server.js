@@ -103,7 +103,7 @@ const { getJevStatus, evaluateDafoReadiness, evaluateTaskStartOptions, JevError 
 const ROOT = __dirname;
 const PORT = Number(process.env.ARIADNE_HUB_PORT || 4177);
 const BOARD_PORT = Number(process.env.ARIADNE_BOARD_PORT || 6421);
-const GANTT_BASE_URL = String(process.env.ARIADNE_GANTT_BASE_URL || 'http://localhost:63447/');
+const GANTT_BASE_URL = String(process.env.ARIADNE_GANTT_BASE_URL || `http://localhost:${PORT}/gantt/`);
 const DEPENDENCY_GATE_POLICY = normalizeGatePolicy(process.env.ARIADNE_DEPENDENCY_GATE_POLICY);
 const HOST = '127.0.0.1';
 const CATALOG = path.resolve(process.env.ARIADNE_CATALOG_PATH || path.join(ROOT, 'projects.json'));
@@ -129,6 +129,38 @@ function uniqueSlug(name, projects) {
   let slug = base; let n = 2;
   while (projects.some((project) => project.slug === slug)) slug = `${base}-${n++}`;
   return slug;
+}
+
+function projectLocation(pathValue, explicitType = '') {
+  const value = String(pathValue || '');
+  const type = explicitType === 'drive-sync' || explicitType === 'local'
+    ? explicitType
+    : (/\/My Drive(?:\/|$)/i.test(value)
+      || /\/Google Drive(?:\/|$)/i.test(value)
+      || /\/CloudStorage\/GoogleDrive-/i.test(value)
+      || /GoogleDriveFS/i.test(value) ? 'drive-sync' : 'local');
+  return type === 'drive-sync'
+    ? { type, label: 'Google Drive sincronizado' }
+    : { type, label: 'Proyecto local' };
+}
+
+function normalizeProjectAccess(value = {}) {
+  const access = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const visibility = access.visibility === 'team' ? 'team' : 'private';
+  const owner = String(access.owner || '').trim().slice(0, 160);
+  const members = Array.isArray(access.members)
+    ? [...new Set(access.members.map((member) => String(member || '').trim()).filter(Boolean))].slice(0, 50)
+    : [];
+  return { visibility, owner, members };
+}
+
+function projectMetadata(project) {
+  const location = projectLocation(project.path, project.locationType);
+  return {
+    locationType: location.type,
+    locationLabel: location.label,
+    access: normalizeProjectAccess(project.access),
+  };
 }
 
 function parseTask(file, sourceOverride) {
@@ -337,6 +369,7 @@ function summarize(project) {
   const nextImprovement = pickNextImprovement(tasks);
   const summary = {
     ...project,
+    ...projectMetadata(project),
     exists: fs.existsSync(project.path),
     bugs: bugs.length,
     bugsOpen: bugs.length - bugsDone,
@@ -358,6 +391,15 @@ function summarize(project) {
 
   if (!summary.exists) {
     summary.ganttMetrics = null;
+    return summary;
+  }
+
+  const hasAriadnePlan = fs.existsSync(path.join(project.path, 'backlog.config.yml'))
+    || fs.existsSync(path.join(project.path, 'backlog'))
+    || fs.existsSync(path.join(project.path, 'docs', 'plans'));
+  if (!hasAriadnePlan) {
+    summary.ganttMetrics = null;
+    summary.planStatus = 'sin-plan-ariadne';
     return summary;
   }
 
@@ -1548,6 +1590,7 @@ async function handle(req, res) {
     return res.end();
   }
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
+  if (url.pathname.startsWith('/ariadne-api/')) url.pathname = url.pathname.slice('/ariadne-api'.length);
   if (req.method === 'GET' && url.pathname === '/api/projects') return json(res, 200, readCatalog().map(summarize));
   if (req.method === 'GET' && url.pathname === '/api/jev/status') {
     const status = getJevStatus();
@@ -1935,10 +1978,45 @@ async function handle(req, res) {
       const data = await body(req); const projects = readCatalog(); const name = String(data.name || '').trim();
       if (!name) return json(res, 400, { error: 'name is required' });
       const slug = uniqueSlug(name, projects); const project = { slug, name, path: path.resolve(data.path || path.join(ROOT, 'projects', slug)), port: 6420 + projects.length + 1, createdAt: new Date().toISOString() };
+      project.locationType = projectLocation(project.path, data.locationType).type;
+      project.access = normalizeProjectAccess({
+        visibility: data.visibility,
+        owner: data.owner,
+        members: Array.isArray(data.members) ? data.members : String(data.members || '').split(/[,\n]/),
+      });
       const alreadyInitialized = fs.existsSync(path.join(project.path, 'backlog.config.yml')) || fs.existsSync(path.join(project.path, 'backlog'));
       if (!alreadyInitialized) await initProject(project);
       projects.push(project); writeCatalog(projects); return json(res, 201, summarize(project));
     } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const projectSettings = url.pathname.match(/^\/api\/projects\/([^/]+)\/settings$/);
+  if (req.method === 'PATCH' && projectSettings) {
+    const projects = readCatalog();
+    const current = projects.find((item) => item.slug === projectSettings[1]);
+    if (!current) return json(res, 404, { error: 'project not found' });
+    try {
+      const data = await body(req);
+      const nextPath = data.path == null ? current.path : path.resolve(String(data.path).trim());
+      if (!nextPath || !fs.existsSync(nextPath) || !fs.statSync(nextPath).isDirectory()) {
+        return json(res, 400, { error: `No existe una carpeta de proyecto en: ${nextPath}` });
+      }
+      const updated = {
+        ...current,
+        name: data.name == null ? current.name : String(data.name).trim(),
+        path: nextPath,
+        locationType: projectLocation(nextPath, data.locationType || current.locationType).type,
+        access: normalizeProjectAccess(data.access || {
+          visibility: data.visibility,
+          owner: data.owner,
+          members: Array.isArray(data.members) ? data.members : String(data.members || '').split(/[,\n]/),
+        }),
+      };
+      if (!updated.name) return json(res, 400, { error: 'name is required' });
+      writeCatalog(projects.map((item) => item.slug === current.slug ? updated : item));
+      return json(res, 200, summarize(updated));
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
   }
   const board = url.pathname.match(/^\/api\/projects\/([^/]+)\/browser$/);
   if (req.method === 'POST' && board) {
@@ -2025,6 +2103,18 @@ async function handle(req, res) {
     }
   }
   if (req.method === 'GET') {
+    if (url.pathname === '/gantt' || url.pathname === '/gantt/') url.pathname = '/gantt/index.html';
+    if (url.pathname.startsWith('/gantt/')) {
+      const ganttRoot = path.join(WEB, 'gantt', 'browser');
+      const relativeAsset = url.pathname.slice('/gantt/'.length);
+      const file = path.resolve(ganttRoot, relativeAsset || 'index.html');
+      const relative = path.relative(ganttRoot, file);
+      if (!relative.startsWith('..') && !path.isAbsolute(relative) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+        const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.json': 'application/json', '.ico': 'image/x-icon' };
+        res.writeHead(200, { 'content-type': `${types[path.extname(file)] || 'application/octet-stream'}; charset=utf-8` });
+        return res.end(fs.readFileSync(file));
+      }
+    }
     const asset = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     const file = path.resolve(WEB, asset);
     if (file.startsWith(`${WEB}${path.sep}`) && fs.existsSync(file)) {

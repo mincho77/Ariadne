@@ -67,12 +67,12 @@ function createSandboxLedger() {
   return ledgerPath;
 }
 
-test('buildLaunchPlan resolves lite skill file for queue moves', () => {
+test('buildLaunchPlan resolves the single skill in lite mode for queue moves', () => {
   const plan = buildLaunchPlan('mueve la tarea a cola');
   assert.equal(plan.mode, 'lite');
-  assert.equal(plan.skillName, 'ariadne-lite');
-  assert.match(plan.skillFile, /skills[/\\]ariadne-lite[/\\]SKILL\.md$/);
-  assert.equal(plan.env.ARIADNE_SKILL, 'ariadne-lite');
+  assert.equal(plan.skillName, 'ariadne');
+  assert.match(plan.skillFile, /skills[/\\]ariadne[/\\]SKILL\.md$/);
+  assert.equal(plan.env.ARIADNE_SKILL, 'ariadne');
 });
 
 test('buildLaunchPlan resolves full skill for deploy requests', () => {
@@ -89,13 +89,13 @@ test('ariadne-launcher CLI emits JSON on stdout', () => {
   });
   assert.equal(result.status, 0, result.stderr);
   const body = JSON.parse(result.stdout);
-  assert.equal(body.skill, 'ariadne-lite');
+  assert.equal(body.skill, 'ariadne');
   assert.ok(body.instructions);
 });
 
 test('ARIM-004 lite path: launcher + audit fix + check_plan', () => {
   const plan = buildLaunchPlan('Ariadne audita corrige');
-  assert.equal(plan.skill, 'ariadne-lite');
+  assert.equal(plan.skill, 'ariadne');
   const catalogPath = createSandboxCatalog();
   const ledgerPath = createSandboxLedger();
 

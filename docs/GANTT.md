@@ -2,7 +2,7 @@
 
 Guía clara de qué hace el Gantt, cómo se conecta con Ariadne, qué datos usa y cómo operarlo.
 
-**Versión:** post-`33f996a` · **Hub:** `http://127.0.0.1:4177` · **UI Gantt:** `http://localhost:63447`
+**Versión:** post-`33f996a` · **Hub:** `http://127.0.0.1:4177` · **UI Gantt:** `http://localhost:4177/gantt/`
 
 ---
 
@@ -23,36 +23,26 @@ Concretamente:
 
 ---
 
-## 2. Arquitectura en dos piezas
+## 2. Arquitectura integrada
 
-```
-  Hub (4177)                Backend Ariadne              UI Gantt (63447)
- ┌─────────────┐           ┌──────────────────┐         ┌─────────────────┐
- │ Abrir Gantt │ ──abre──► │ buildProjectGantt│ ◄─fetch─│ Barras, flechas,│
- │ por proyecto│           │ + APIs JSON      │         │ calendario      │
- └─────────────┘           └──────────────────┘         └─────────────────┘
-                                    ▲
-                                    │ lee
-                           backlog/tasks/*.md
-                           ai-capacity.config.json
+```text
+Navegador (/gantt/) ── mismo Hub (4177) ── API Gantt y tareas
+                                         └── backlog/tasks/*.md
 ```
 
 | Pieza | Dónde vive | Rol |
 |-------|------------|-----|
-| **Motor de planificación** | `server.js` → `buildProjectGantt()` | Lee backlog, calcula fechas, dependencias, ruta crítica |
-| **API REST** | Hub `:4177` | Entrega JSON al frontend |
-| **UI visual** | App externa `:63447` | Dibuja el diagrama de Gantt |
-| **Entrada usuario** | Hub → botón **Abrir Gantt** | Abre `http://localhost:63447/?project={slug}` |
+| Motor de planificación y API | Hub `:4177` | Lee el backlog y calcula plan, fechas, dependencias y ruta crítica |
+| UI visual | `apps/gantt-ui/`, servida desde `/gantt/` | Presenta y permite editar el plan |
+| Datos del proyecto | Ruta registrada en el catálogo local | Markdown del backlog y configuración del proyecto |
+| Entrada | Hub → botón **Abrir Gantt** | Abre `/gantt/?project={slug}` en el mismo origen |
 
-> **Importante:** el código del gráfico visual **no está en el repo Ariadne**. Este repo implementa el **cerebro** (scheduling + persistencia). La UI es un frontend separado que consume la API.
+El frontend y el backend se distribuyen juntos. El Hub sirve la UI compilada desde `public/gantt/browser/`; no hay que clonar otro repositorio ni arrancar un servidor Gantt separado.
 
-Configuración de la URL de la UI:
+La URL es configurable mediante `ARIADNE_GANTT_BASE_URL`; por defecto usa `http://localhost:4177/gantt/`. Consulta `GET /api/hub-config` para descubrirla. El contrato y la compilación están descritos en `docs/gantt-ui-integration.md`.
 
-- Variable de entorno: `ARIADNE_GANTT_BASE_URL` (default `http://localhost:63447/`)
-- O consulta: `GET /api/hub-config` → `{ "ganttBaseUrl": "...", "ganttUi": { ... } }`
-- Contrato completo UI↔Hub: `docs/gantt-ui-integration.md`; la UI externa es opcional y configurable.
-- Smoke backend: `npm run gantt:smoke`
-
+- Compilación UI: `npm run gantt:build`
+- Smoke UI + API: `npm run gantt:smoke`
 ---
 
 ## 3. Flujo de uso
@@ -61,7 +51,7 @@ Configuración de la URL de la UI:
 
 1. Abre `http://127.0.0.1:4177`
 2. En la tarjeta del proyecto, pulsa **Abrir Gantt**
-3. Se abre una ventana en `:63447/?project=project-demo` (ejemplo)
+3. Se abre una ventana en `http://127.0.0.1:4177/gantt/?project=project-demo` (ejemplo)
 4. La UI pide el plan a Ariadne y lo renderiza
 
 ### 3.2 Desde la API (sin UI)
@@ -230,7 +220,7 @@ GET /api/hub-config
 
 ```json
 {
-  "ganttBaseUrl": "http://localhost:63447/",
+  "ganttBaseUrl": "http://localhost`/gantt/`/",
   "hubPort": 4177,
   "boardPort": 6421
 }
@@ -443,10 +433,10 @@ Script auxiliar capacidad: `scripts/check-ai-capacity-config.sh`
 |---------|----------------|--------|
 | `cycleDetected: true` | Ciclo de dependencias | Revisar `dependencies` en frontmatter |
 | `unresolvedDependencies > 0` | ID de predecesora inexistente o typo | Corregir ID o crear tarea |
-| UI vacía en :63447 | Frontend Gantt no levantado | Arrancar app en puerto 63447 |
+| UI vacía en `/gantt/` | los assets no se compilaron | Ejecutar `npm run gantt:build` |
 | Fechas extrañas | Sin `estimate_*` | Añadir `estimate_days` o `estimate_ia_hours` |
 | Todo serial | `capacity=1` | Subir capacity o configurar ai-capacity |
-| Hub devuelve 404 en `/gantt` | Hub viejo corriendo | `launchctl kickstart -k ...` |
+| Hub devuelve 404 en `/gantt/` | Hub antiguo o assets ausentes | Reconstruir y reiniciar Ariadne |
 
 ### Tests automatizados
 
@@ -479,4 +469,4 @@ Casos relevantes en `server.test.js`:
 
 ## 12. Resumen en una frase
 
-**El Gantt de Ariadne lee el backlog Markdown de un proyecto, aplica un calendario laboral colombiano, respeta dependencias FS/SS/FF/SF con lag, simula paralelismo según capacidad IA/humana, y expone un plan JSON con fechas, ruta crítica y aristas — que una UI externa en `:63447` convierte en diagrama visual.**
+**El Gantt de Ariadne lee el backlog Markdown de un proyecto, aplica un calendario laboral colombiano, respeta dependencias FS/SS/FF/SF con lag, simula paralelismo según capacidad IA/humana, y expone un plan JSON con fechas, ruta crítica y aristas — que una UI integrada en `/gantt/` convierte en diagrama visual.**

@@ -6,7 +6,7 @@ const TASKS_DIR = path.join(__dirname, '..', 'backlog', 'tasks');
 
 const SPECS = {
   'AH-E-9': {
-    description: 'Documentar motor buildProjectGantt, APIs REST, persistencia frontmatter, UI externa :63447, capacidad, ruta crítica, calendario CO, dependencias FS/SS/FF/SF y limitaciones actuales.',
+    description: 'Documentar motor buildProjectGantt, APIs REST, persistencia frontmatter, UI integrada `/gantt/`, capacidad, ruta crítica, calendario CO, dependencias FS/SS/FF/SF y limitaciones actuales.',
     ac: [
       'Existe diagnóstico en docs/plans/ariadne-gantt.md con existente/parcial/ausente',
       'docs/ARQUITECTURA.md y docs/GANTT.md presentes y referenciados',
@@ -117,7 +117,7 @@ const SPECS = {
     ],
   },
   'AH-E-23': {
-    description: 'Coordinar UI editable en repo externo (:63447); contrato API; tabla+timeline; dependencias visuales; enlace en ledger.',
+    description: 'Coordinar UI editable en repositorio Ariadne (servicio `/gantt/` integrado); contrato API; tabla+timeline; dependencias visuales; enlace en ledger.',
     ac: [
       'Bloqueo UI documentado si repo no disponible',
       'Tareas coordinadora con URL del frontend',

@@ -37,7 +37,7 @@ function classifyMessage(text) {
   if (!input) {
     return {
       mode: 'lite',
-      skill: 'ariadne-lite',
+      skill: 'ariadne',
       modelTier: 'economy',
       modelHint: 'cheap',
       reason: 'empty input defaults to lite',
@@ -60,7 +60,7 @@ function classifyMessage(text) {
     if (pattern.test(input)) {
       return {
         mode: 'lite',
-        skill: 'ariadne-lite',
+        skill: 'ariadne',
         modelTier: 'economy',
         modelHint: 'cheap',
         reason: `matched lite pattern: ${pattern}`,
@@ -82,7 +82,7 @@ function main() {
   const result = {
     ...classifyMessage(message),
     message,
-    docs: 'docs/ariadne-lite.md',
+    docs: 'skills/ariadne/SKILL.md',
   };
   console.log(JSON.stringify(result, null, 2));
 }

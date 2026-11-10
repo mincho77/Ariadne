@@ -65,7 +65,8 @@ async function main() {
       const boardBaseUrl = normalizeUrl(config.boardBaseUrl);
       const ganttBaseUrl = normalizeUrl(config.ganttBaseUrl);
 
-      const localGanttUp = await isLocalPortReachable(63447);
+      const hubPort = Number(process.env.ARIADNE_HUB_PORT || 4177);
+      const localGanttUp = await isLocalPortReachable(hubPort);
 
       if (localGanttUp) {
         envOverrides = {
@@ -80,8 +81,8 @@ async function main() {
           isReachable(boardBaseUrl),
           isReachable(ganttBaseUrl),
         ]);
-        console.warn('[ariadne] DevTunnels config enabled but Gantt local service is not up yet.');
-        console.warn(`[ariadne] local gantt (63447): ${localGanttUp}`);
+        console.warn('[ariadne] DevTunnels config enabled but the Ariadne Hub is not reachable yet.');
+        console.warn(`[ariadne] local Hub (${hubPort}): ${localGanttUp}`);
         console.warn(`[ariadne] public board URL reachable: ${boardPublicReachable}`);
         console.warn(`[ariadne] public gantt URL reachable: ${ganttPublicReachable}`);
         console.warn('[ariadne] Starting with local URLs.');

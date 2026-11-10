@@ -1,9 +1,10 @@
 const projects = document.querySelector('#projects');
 const empty = document.querySelector('#empty');
 const dialog = document.querySelector('#dialog');
+const settingsDialog = document.querySelector('#settings-dialog');
 const hoyBody = document.querySelector('#hoy-body');
 const hoyRefresh = document.querySelector('#hoy-refresh');
-const DEFAULT_GANTT_BASE_URL = 'http://localhost:63447/';
+const DEFAULT_GANTT_BASE_URL = `${window.location.origin}/gantt/`;
 let ganttBaseUrl = DEFAULT_GANTT_BASE_URL;
 
 function normalizeBaseUrl(value) {
@@ -34,6 +35,7 @@ async function loadHubConfig() {
 async function load() {
   const response = await fetch('/api/projects', { cache: 'no-store' });
   const data = await response.json();
+  lastProjects = data;
   projects.innerHTML = data.map(card).join('');
   empty.hidden = data.length > 0;
   projects.querySelectorAll('[data-board]').forEach((button) => {
@@ -50,6 +52,9 @@ async function load() {
   });
   projects.querySelectorAll('[data-swarm-run]').forEach((button) => {
     button.onclick = () => runSwarm(button.dataset.swarmRun);
+  });
+  projects.querySelectorAll('[data-settings]').forEach((button) => {
+    button.onclick = () => openSettings(button.dataset.settings);
   });
   await loadHoy();
 }
@@ -184,12 +189,16 @@ function card(p) {
   const bugsActionClass = focus === 'bugs' ? '' : ' secondary-style';
   const mejoraActionClass = focus === 'mejoras' ? '' : ' secondary-style';
 
+  const access = p.access || {};
+  const collaborators = [access.owner, ...(access.members || [])].filter(Boolean);
+  const accessLabel = access.visibility === 'team' ? `Equipo · ${collaborators.length || 0} personas` : 'Solo este equipo';
   return `<article class="project-card">
     <div class="card-top">
       <h2>${escapeHtml(p.name)}</h2>
       <span class="focus-pill ${focusClass}">${focusLabel}</span>
     </div>
-    <p class="path">${escapeHtml(p.path)}</p>
+    <div class="project-meta"><span class="location-pill ${escapeHtml(p.locationType || 'local')}">${escapeHtml(p.locationLabel || 'Proyecto local')}</span><span class="access-pill">${escapeHtml(accessLabel)}</span></div>
+    <p class="path" title="${escapeHtml(p.path)}">${escapeHtml(p.path)}</p>
     <div class="lanes">
       <section class="lane lane-bugs" aria-label="Resumen de bugs">
         <div class="lane-head">
@@ -214,12 +223,28 @@ function card(p) {
     </div>
     ${ganttMetricsHtml(p.ganttMetrics)}
     <div class="card-actions">
+      <button data-settings="${escapeHtml(p.slug)}" class="btn-swarm secondary">Configurar</button>
       <button data-gantt="${escapeHtml(p.slug)}" class="btn-gantt">Abrir Gantt</button>
       <button data-swarm-status="${escapeHtml(p.slug)}" class="btn-swarm secondary">Swarm status</button>
       <button data-swarm-observe="${escapeHtml(p.slug)}" class="btn-swarm secondary">Handoffs</button>
       <button data-swarm-run="${escapeHtml(p.slug)}" class="btn-swarm">Run swarm</button>
     </div>
   </article>`;
+}
+
+function openSettings(slug) {
+  const project = lastProjects.find((item) => item.slug === slug);
+  if (!project) return;
+  const form = document.querySelector('#settings-form');
+  const access = project.access || {};
+  form.elements.slug.value = project.slug;
+  form.elements.name.value = project.name || '';
+  form.elements.path.value = project.path || '';
+  form.elements.locationType.value = project.locationType || 'local';
+  form.elements.visibility.value = access.visibility || 'private';
+  form.elements.owner.value = access.owner || '';
+  form.elements.members.value = (access.members || []).join(', ');
+  settingsDialog.showModal();
 }
 
 async function openBoard(slug, view) {
@@ -299,6 +324,7 @@ function escapeHtml(value) {
 }
 
 document.querySelector('#new-project').onclick = () => dialog.showModal();
+let lastProjects = [];
 document.querySelector('#project-form').onsubmit = async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target));
@@ -307,6 +333,19 @@ document.querySelector('#project-form').onsubmit = async (event) => {
   dialog.close();
   event.target.reset();
   load();
+};
+document.querySelector('#settings-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  const slug = data.slug;
+  delete data.slug;
+  data.members = String(data.members || '').split(/[,\n]/).map((item) => item.trim()).filter(Boolean);
+  const response = await fetch(`/api/projects/${encodeURIComponent(slug)}/settings`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data),
+  });
+  if (!response.ok) return alert((await response.json()).error);
+  settingsDialog.close();
+  await load();
 };
 window.addEventListener('focus', load);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });

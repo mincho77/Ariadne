@@ -2,10 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { classifyMessage } = require('../scripts/ariadne-route-hint');
 
-test('classifyMessage routes queue moves to lite', () => {
+test('classifyMessage routes queue moves to lite mode in the single skill', () => {
   const row = classifyMessage('mueve PD-E-3 a la cola con ordinal 10');
   assert.equal(row.mode, 'lite');
-  assert.equal(row.skill, 'ariadne-lite');
+  assert.equal(row.skill, 'ariadne');
   assert.equal(row.modelHint, 'cheap');
 });
 
@@ -21,8 +21,8 @@ test('classifyMessage routes Gantt work to full', () => {
   assert.equal(row.mode, 'full');
 });
 
-test('classifyMessage routes ledger audit fix to lite', () => {
+test('classifyMessage routes ledger audit fix to lite mode in the single skill', () => {
   const row = classifyMessage('Ariadne audita corrige');
   assert.equal(row.mode, 'lite');
-  assert.equal(row.skill, 'ariadne-lite');
+  assert.equal(row.skill, 'ariadne');
 });

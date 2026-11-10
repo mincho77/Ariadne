@@ -11,7 +11,6 @@ const {
   buildGanttLaunchUrl,
   buildHubGanttUiConfig,
   validateGanttPlanForUi,
-  FRONTEND_REPO,
 } = require('../lib/gantt/ui-contract');
 const { buildProjectGanttFromTasks } = require('../lib/gantt/scheduler');
 const { parseTask } = require('../server');
@@ -69,22 +68,21 @@ function createGanttUiSandbox() {
   return { catalogPath, projectRoot };
 }
 
-test('buildGanttLaunchUrl encodes project slug for external UI', () => {
-  const url = buildGanttLaunchUrl('http://localhost:63447/', 'ariadne', { capacity: 2 });
-  assert.equal(url, 'http://localhost:63447/?project=ariadne&capacity=2');
+test('buildGanttLaunchUrl encodes project slug for bundled UI', () => {
+  const url = buildGanttLaunchUrl('http://localhost:4177/gantt/', 'ariadne', { capacity: 2 });
+  assert.equal(url, 'http://localhost:4177/gantt/?project=ariadne&capacity=2');
 });
 
-test('buildHubGanttUiConfig documents frontend repo and block state', () => {
+test('buildHubGanttUiConfig marks the bundled UI as available', () => {
   const config = buildHubGanttUiConfig({
     hubApiBase: 'http://127.0.0.1:4177',
-    ganttBaseUrl: 'http://localhost:63447/',
+    ganttBaseUrl: 'http://localhost:4177/gantt/',
     hubPort: 4177,
     boardPort: 6421,
   });
-  assert.equal(config.frontend.repoUrl, FRONTEND_REPO);
   assert.equal(config.frontend.repoUrl, '');
-  assert.equal(config.frontend.blockedInWorkspace, true);
-  assert.equal(config.frontend.blockId, 'AGANTT-DEF-01');
+  assert.equal(config.frontend.blockedInWorkspace, false);
+  assert.equal(config.frontend.blockId, null);
   assert.ok(config.endpoints.ganttPlan.path.includes('{slug}'));
 });
 
@@ -109,8 +107,7 @@ test('validateGanttPlanForUi accepts scheduler output', () => {
 test('gantt UI smoke: hub-config, contract, plan JSON, launch URL', { timeout: 25000 }, async () => {
   const { catalogPath } = createGanttUiSandbox();
   const port = await reservePort();
-  const ganttUiPort = await reservePort();
-  const ganttBaseUrl = `http://127.0.0.1:${ganttUiPort}/`;
+  const ganttBaseUrl = `http://localhost:${port}/gantt/`;
   const child = spawn(process.execPath, ['server.js'], {
     cwd: path.join(__dirname, '..'),
     env: {
@@ -118,7 +115,6 @@ test('gantt UI smoke: hub-config, contract, plan JSON, launch URL', { timeout: 2
       ARIADNE_HUB_PORT: String(port),
       ARIADNE_BOARD_PORT: String(port),
       ARIADNE_CATALOG_PATH: catalogPath,
-      ARIADNE_GANTT_BASE_URL: ganttBaseUrl,
     },
     stdio: 'ignore',
   });
@@ -132,13 +128,14 @@ test('gantt UI smoke: hub-config, contract, plan JSON, launch URL', { timeout: 2
     assert.equal(hubBody.ganttBaseUrl, ganttBaseUrl);
     assert.ok(hubBody.hubApiBase.includes(String(port)));
     assert.match(hubBody.ganttLaunchExample, /project=demo-gantt-ui/);
-    assert.equal(hubBody.ganttUi.frontend.blockedInWorkspace, true);
+    assert.equal(hubBody.ganttUi.frontend.blockedInWorkspace, false);
     assert.equal(hubBody.ganttUi.contractVersion, '1.0');
 
     const contract = await fetch(`http://127.0.0.1:${port}/api/gantt-ui-contract`);
     assert.equal(contract.status, 200);
     const contractBody = await contract.json();
-    assert.equal(contractBody.frontend.repoUrl, FRONTEND_REPO);
+    assert.equal(contractBody.frontend.repoUrl, '');
+    assert.equal(contractBody.frontend.blockedInWorkspace, false);
 
     const planRes = await fetch(`http://127.0.0.1:${port}/api/projects/demo-gantt-ui/gantt?includeDone=0&startDate=2026-08-04`);
     assert.equal(planRes.status, 200);
@@ -151,14 +148,9 @@ test('gantt UI smoke: hub-config, contract, plan JSON, launch URL', { timeout: 2
     const launchUrl = buildGanttLaunchUrl(hubBody.ganttBaseUrl, 'demo-gantt-ui');
     assert.match(launchUrl, /project=demo-gantt-ui/);
 
-    let uiReachable = false;
-    try {
-      const uiProbe = await fetch(ganttBaseUrl, { signal: AbortSignal.timeout(800) });
-      uiReachable = uiProbe.status < 500;
-    } catch {
-      uiReachable = false;
-    }
-    assert.equal(uiReachable, false, 'external UI should not be running in smoke sandbox');
+    const uiResponse = await fetch(`http://127.0.0.1:${port}/gantt/`);
+    assert.equal(uiResponse.status, 200);
+    assert.match(await uiResponse.text(), /Ariadne · Gantt/);
   } finally {
     await stopProcess(child);
   }

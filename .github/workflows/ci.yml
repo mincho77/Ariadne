@@ -20,6 +20,10 @@ jobs:
           cache: npm
       - name: Install (ignore-scripts)
         run: npm ci --ignore-scripts
+      - name: Build bundled Gantt UI
+        run: |
+          npm --prefix apps/gantt-ui ci --ignore-scripts
+          npm run gantt:build
       - name: Onboarding and startup checks
         run: npm run test:install
       - name: Inspect npm package contents
@@ -36,6 +40,10 @@ jobs:
       # ChainDrop / Shai-Hulud: never run dependency lifecycle scripts in CI
       - name: Install (ignore-scripts)
         run: npm ci --ignore-scripts
+      - name: Build bundled Gantt UI
+        run: |
+          npm --prefix apps/gantt-ui ci --ignore-scripts
+          npm run gantt:build
       - name: Unit tests
         run: npm test
       - name: Supply-chain worm audit (seed)

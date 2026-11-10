@@ -32,7 +32,7 @@ npm run ariadne:checkpoint -- --dry-run
 ## Flujo recomendado para agentes
 
 ```text
-1. Editar ledger / evidencia / estado (ariadne-lite o full)
+1. Editar ledger / evidencia / estado (modo liviano o completo del skill Ariadne)
 2. npm run ariadne:sync -- --fix
 3. npm test   (si hubo cambios de código)
 4. Commit
@@ -64,4 +64,4 @@ npm run ariadne:sync -- --fix --json
 
 - Audit: `scripts/ariadne-audit-all.js`, `lib/ledger-hygiene.js`
 - Launcher (skill path): `docs/ariadne-launcher.md`
-- Lite: `docs/ariadne-lite.md`
+- Modo liviano: `skills/ariadne/SKILL.md`
