@@ -198,6 +198,42 @@ h1 {
   text-overflow: ellipsis;
 }
 
+.project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.location-pill,
+.access-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+.location-pill.local {
+  color: #d1d1d6;
+  background: #ffffff12;
+  border: 1px solid #ffffff22;
+}
+
+.location-pill.drive-sync {
+  color: #9ef5b8;
+  background: #30d15822;
+  border: 1px solid #30d15855;
+}
+
+.access-pill {
+  color: #d7c8ff;
+  background: #6d4bd222;
+  border: 1px solid #8b6be055;
+}
+
 .focus-pill {
   flex-shrink: 0;
   padding: 5px 10px;
@@ -480,6 +516,28 @@ input {
   background: #000;
   color: #fff;
   font: inherit;
+}
+
+select,
+textarea {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #000;
+  color: #fff;
+  font: inherit;
+}
+
+textarea { resize: vertical; }
+
+.form-help {
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .dialog-actions {

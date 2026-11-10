@@ -1,6 +1,6 @@
 # Launcher externo — route-hint → skill
 
-Cableado **in-repo** para que un wrapper de Codex/Cursor elija `ariadne-lite` vs `ariadne` antes de cargar contexto.
+Cableado **in-repo** para que un wrapper de Codex/Cursor seleccione el modo liviano o completo del único skill Ariadne.
 
 ## CLI
 
@@ -13,7 +13,7 @@ Salida JSON (`ariadne-launcher.js`):
 
 | Campo | Uso |
 |-------|-----|
-| `mode` / `skill` | `lite` → `ariadne-lite`; `full` → `ariadne` |
+| `mode` / `skill` | `lite` → `ariadne`; `full` → `ariadne` |
 | `skillFile` | Ruta absoluta a `SKILL.md` a cargar |
 | `env` | `ARIADNE_SKILL`, `ARIADNE_MODEL_TIER`, `ARIADNE_ROUTE_MODE` |
 | `instructions` | Texto breve para el orquestador |
@@ -23,7 +23,7 @@ Salida JSON (`ariadne-launcher.js`):
 ```bash
 eval "$(./scripts/ariadne-launcher.sh 'actualiza el ledger y valida')"
 echo "$ARIADNE_SKILL $ARIADNE_SKILL_FILE"
-# → ariadne-lite …/skills/ariadne-lite/SKILL.md
+# → ariadne …/skills/ariadne/SKILL.md
 ```
 
 Con mensaje en stdin:
@@ -51,13 +51,13 @@ Salida esperada (resumida):
 ```json
 {
   "mode": "lite",
-  "skill": "ariadne-lite",
+  "skill": "ariadne",
   "modelTier": "economy",
   "reason": "matched lite pattern: ..."
 }
 ```
 
-Luego el agente carga solo `skills/ariadne-lite/SKILL.md`. Pedido *«audita con Pharos y despliega»* → `mode: full` / `skill: ariadne`.
+En ambos modos, el agente carga `skills/ariadne/SKILL.md` y sigue el alcance indicado. Pedido *«audita con Pharos y despliega»* → `mode: full` / `skill: ariadne`.
 
 En Cursor la regla siempre activa `.cursor/rules/ariadne-route.mdc` recuerda este preflight.
 
@@ -74,6 +74,6 @@ Post-edicion de ledgers: ver **`docs/ariadne-automation.md`** (`npm run ariadne:
 
 ## Referencias
 
-- Decisión: `docs/ariadne-lite.md`
+- Decisión: `docs/ariadne-modes.md`
 - Ledger: `docs/plans/ariadne-mejoras.md` (ARIM-003, ARIM-004)
 - Implementación: `scripts/ariadne-route-hint.js`, `scripts/ariadne-launcher.js`

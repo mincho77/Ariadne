@@ -1,0 +1,683 @@
+<div class="workspace-shell" [class.clean-ui]="!showAdvancedUi()">
+  <aside class="pm-sidebar">
+    <p class="pm-project">{{ projectNameFromSlug(selectedProject()) || 'Proyecto' }}</p>
+    <nav class="pm-nav">
+      <button class="pm-nav-item">Tasks</button>
+      <button class="pm-nav-item">Discussions</button>
+      <button class="pm-nav-item active">Gantt</button>
+      <button class="pm-nav-item">Calendar</button>
+      <button class="pm-nav-item">Files</button>
+      <button class="pm-nav-item">Time</button>
+      <button class="pm-nav-item">Report</button>
+    </nav>
+  </aside>
+
+  <div class="page">
+  <header class="topbar">
+    <div class="brand-wrap">
+      <img class="brand-logo" src="assets/ariadne-mark.svg" alt="Ariadne" />
+      <p class="brand-title">Ariadne Planner</p>
+    </div>
+
+    <div class="theme-row">
+      <span class="theme-label">Modo oscuro</span>
+      <button
+        type="button"
+        class="theme-switch"
+        role="switch"
+        [attr.aria-checked]="isDarkTheme()"
+        [attr.aria-label]="isDarkTheme() ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+        (click)="toggleTheme()"
+      >
+        <span class="switch-track">
+          <span class="switch-thumb">
+            <img [src]="themeIconPath()" alt="" aria-hidden="true" />
+          </span>
+        </span>
+      </button>
+      <button class="chip" (click)="showAdvancedUi.set(!showAdvancedUi())">
+        {{ showAdvancedUi() ? 'Vista simple' : 'Vista completa' }}
+      </button>
+    </div>
+  </header>
+
+  <header class="hero">
+    <p class="eyebrow">Ariadne Planning</p>
+    <h1>Gantt operativo por proyecto</h1>
+    @if (showAdvancedUi()) {
+      <p class="lead">
+        Vista limpia para ejecucion: dependencias visibles, calendario laboral y ruta critica en
+        horas IA.
+      </p>
+    }
+  </header>
+
+  <section class="control-grid card">
+    <div class="control-row">
+      <label for="project">Proyecto</label>
+      <select
+        id="project"
+        [ngModel]="selectedProject()"
+        (ngModelChange)="onProjectChange($event)"
+      >
+        @for (project of projects(); track project.slug) {
+          <option [value]="project.slug">{{ project.name }} ({{ project.slug }})</option>
+        }
+      </select>
+    </div>
+
+    <div class="control-row">
+      <label for="capacity">Capacidad (personas paralelas): {{ capacity() }}</label>
+      <input
+        id="capacity"
+        type="range"
+        min="1"
+        max="12"
+        [ngModel]="capacity()"
+        (ngModelChange)="updateCapacity($event); refreshGantt()"
+      />
+    </div>
+
+    <div class="control-row">
+      <label for="ia-hours">Horas IA por dia laboral: {{ iaHoursPerDay() }}</label>
+      <input
+        id="ia-hours"
+        type="range"
+        min="1"
+        max="24"
+        [ngModel]="iaHoursPerDay()"
+        (ngModelChange)="updateIaHoursPerDay($event); refreshGantt()"
+      />
+    </div>
+
+    <div class="control-row">
+      <label for="zoom">Zoom timeline: {{ zoom() }} px/dia habil</label>
+      <input
+        id="zoom"
+        type="range"
+        min="18"
+        max="48"
+        [ngModel]="zoom()"
+        (ngModelChange)="updateZoom($event)"
+      />
+      <div class="zoom-presets">
+        <button class="chip" [class.active]="zoom() <= 24" (click)="setZoomPreset('compact')">Compacto</button>
+        <button class="chip" [class.active]="zoom() > 24 && zoom() < 36" (click)="setZoomPreset('balanced')">Balanceado</button>
+        <button class="chip" [class.active]="zoom() >= 36" (click)="setZoomPreset('detail')">Detalle</button>
+      </div>
+    </div>
+
+    <div class="control-row">
+      <label>Rango visible en timeline</label>
+      <div class="range-row">
+        <input type="date" [ngModel]="timelineFrom()" (ngModelChange)="timelineFrom.set($event)" />
+        <input type="date" [ngModel]="timelineTo()" (ngModelChange)="timelineTo.set($event)" />
+        <button class="chip" (click)="resetTimelineRange()">Todo</button>
+      </div>
+    </div>
+
+    <div class="control-row chips">
+      <button class="chip" [class.active]="laneFilter() === 'all'" (click)="laneFilter.set('all')">
+        Todo
+      </button>
+      <button class="chip" [class.active]="laneFilter() === 'bugs'" (click)="laneFilter.set('bugs')">
+        Bugs
+      </button>
+      <button
+        class="chip"
+        [class.active]="laneFilter() === 'mejoras'"
+        (click)="laneFilter.set('mejoras')"
+      >
+        Mejoras
+      </button>
+      <button class="chip refresh" [disabled]="loading()" (click)="refreshGantt()">
+        {{ loading() ? 'Actualizando...' : 'Refrescar plan' }}
+      </button>
+      <button class="chip" [class.active]="showAdvancedUi()" (click)="showAdvancedUi.set(!showAdvancedUi())">
+        {{ showAdvancedUi() ? 'Ocultar avanzados' : 'Mostrar avanzados' }}
+      </button>
+    </div>
+
+    @if (showAdvancedUi()) {
+      <div class="control-row chips">
+        <button class="chip" [class.active]="showCriticalPath()" (click)="showCriticalPath.set(!showCriticalPath())">
+          Ruta critica
+        </button>
+        <button class="chip" [class.active]="showAllDependencies()" (click)="showAllDependencies.set(!showAllDependencies())">
+          {{ showAllDependencies() ? 'Todas las dependencias' : 'Dependencias de seleccion' }}
+        </button>
+        <button class="chip" [class.active]="useColombiaHolidays()" (click)="toggleColombiaHolidays()">
+          Festivos CO ({{ autoHolidayCount() }})
+        </button>
+        <button class="chip" [class.active]="includeDone()" (click)="toggleIncludeDone(!includeDone()); refreshGantt()">
+          Incluir done
+        </button>
+        <button class="chip" [class.active]="workOnSaturday()" (click)="workOnSaturday.set(!workOnSaturday()); refreshGantt()">
+          Sabado laboral
+        </button>
+      </div>
+    }
+
+    @if (showAdvancedUi()) {
+      <details class="advanced-calendar" open>
+        <summary>Calendario avanzado</summary>
+        <div class="advanced-grid">
+          <div class="control-row">
+            <label for="start-date">Fecha inicio calendario</label>
+            <input
+              id="start-date"
+              type="date"
+              [ngModel]="startDate()"
+              (ngModelChange)="startDate.set($event); refreshGantt()"
+            />
+          </div>
+
+          <div class="control-row">
+            <label for="holidays">Festivos manuales (YYYY-MM-DD, coma)</label>
+            <input
+              id="holidays"
+              type="text"
+              [ngModel]="holidaysInput()"
+              (ngModelChange)="holidaysInput.set($event)"
+              (blur)="refreshGantt()"
+              placeholder="2026-08-07,2026-12-08"
+            />
+          </div>
+        </div>
+      </details>
+    }
+  </section>
+
+  @if (showAdvancedUi()) {
+  <section class="card capacity-module">
+    <div class="capacity-head">
+      <h2>Modulo de capacidades IA</h2>
+      <p class="sub">Capacidad humana: {{ capacity() }} · Slots IA: {{ aiModelParallelSlots() }} · Modelos que requieren operador: {{ aiOperatorLoad() }} · Operadores activos: {{ aiOperatorAvailableCount() }} (slots {{ aiOperatorParallelSlots() }}) · Capacidad efectiva: {{ effectiveCapacity() }}</p>
+      <p class="sync-pill" [class.saving]="aiCapacitySyncState() === 'saving'" [class.synced]="aiCapacitySyncState() === 'synced'" [class.local]="aiCapacitySyncState() === 'local-only'">
+        {{ aiCapacitySyncText() }}
+      </p>
+    </div>
+    <div class="capacity-grid">
+      @for (model of aiModels(); track model.key) {
+        <article class="capacity-row" [class.disabled]="!model.enabled">
+          <div class="capacity-title">
+            <span class="model-badge" [ngClass]="assigneeClass(model.key)">{{ model.initials }}</span>
+            <div>
+              <strong>{{ model.name }}</strong>
+              <small>{{ model.key.toUpperCase() }}</small>
+            </div>
+          </div>
+          <label class="mini-toggle">
+            <input type="checkbox" [checked]="model.enabled" (change)="toggleAiModelEnabled(model.key)" />
+            <span>Activo</span>
+          </label>
+          <label>
+            Slots
+            <input type="range" min="1" max="6" [ngModel]="model.maxParallel" (ngModelChange)="updateAiModelParallel(model.key, $event)" [disabled]="!model.enabled" />
+          </label>
+          <label class="mini-toggle">
+            <input type="checkbox" [checked]="model.requiresOperator" (change)="toggleAiModelOperator(model.key)" [disabled]="!model.enabled" />
+            <span>Requiere operador</span>
+          </label>
+          <select [ngModel]="model.operatorId || ''" (ngModelChange)="updateAiModelOperatorAssignment(model.key, $event)" [disabled]="!model.enabled || !model.requiresOperator">
+            <option value="">Sin asignar</option>
+            @for (operator of aiOperators(); track operator.id) {
+              <option [value]="operator.id">{{ operator.name || operator.id }} · {{ operator.active ? 'activo' : 'inactivo' }}</option>
+            }
+          </select>
+        </article>
+      }
+    </div>
+
+    <div class="operators-head">
+      <h3>Operadores IA</h3>
+      <button class="chip" (click)="addAiOperator()">Agregar operador</button>
+    </div>
+    <div class="operators-grid">
+      @for (operator of aiOperators(); track operator.id) {
+        <article class="operator-row" [class.disabled]="!operator.active">
+          <label class="mini-toggle">
+            <input type="checkbox" [checked]="operator.active" (change)="toggleAiOperatorActive(operator.id)" />
+            <span>Activo</span>
+          </label>
+          <input type="text" [ngModel]="operator.name" (ngModelChange)="updateAiOperatorName(operator.id, $event)" placeholder="Nombre operador" />
+          <label>
+            Slots
+            <input type="range" min="1" max="6" [ngModel]="operator.maxParallel" (ngModelChange)="updateAiOperatorSlots(operator.id, $event)" [disabled]="!operator.active" />
+          </label>
+          <label>
+            Horas/dia
+            <input type="range" min="1" max="24" [ngModel]="operator.hoursPerDay" (ngModelChange)="updateAiOperatorHours(operator.id, $event)" [disabled]="!operator.active" />
+          </label>
+          <button class="chip danger" (click)="removeAiOperator(operator.id)">Quitar</button>
+        </article>
+      }
+    </div>
+  </section>
+  }
+
+  @if (showAdvancedUi()) {
+  <section class="metrics">
+    <article class="card">
+      <p class="label">Proyecto</p>
+      <p class="value metric-small">{{ projectNameFromSlug(selectedProject()) || '-' }}</p>
+      <p class="sub">Inicio: {{ gantt()?.parameters?.startDate || '-' }} · Festivos: {{ gantt()?.parameters?.holidays?.length || 0 }}</p>
+    </article>
+    <article class="card">
+      <p class="label">Avance</p>
+      <p class="value">{{ gantt()?.summary?.completionRate || 0 }}%</p>
+      <p class="sub">
+        {{ gantt()?.summary?.doneTasks || 0 }} / {{ gantt()?.summary?.totalTasks || 0 }} tareas
+      </p>
+    </article>
+    <article class="card">
+      <p class="label">Tiempo estimado</p>
+      <p class="value">{{ gantt()?.summary?.estimatedPendingIaHours || 0 }} h IA</p>
+      <p class="sub">Ruta critica: {{ gantt()?.criticalPath?.estimatedIaHours || 0 }} h IA</p>
+    </article>
+    <article class="card">
+      <p class="label">Paralelismo</p>
+      <p class="value">{{ gantt()?.parallelGroups?.length || 0 }} ventanas</p>
+      <p class="sub">Dependientes: {{ gantt()?.dependencyEdges?.length || 0 }}</p>
+    </article>
+  </section>
+  }
+
+  @if (errorMessage()) {
+    <section class="search-card">
+      <p class="error">{{ errorMessage() }}</p>
+    </section>
+  }
+
+  <section class="results gantt-layout" [class.panel-hidden]="showAdvancedUi() && !showRoutePanel()">
+    <article class="card tall timeline-wrap">
+      <div class="timeline-toolbar">
+        <div>
+          <h2>Timeline de ejecucion (dias habiles)</h2>
+          <p class="sub timeline-hint">Selecciona una tarea para ver sus dependencias; activa “Todas las dependencias” si quieres la red completa.</p>
+        </div>
+        <div class="period-nav">
+          <button class="period-btn" (click)="shiftTimelineByMonths(-1)" [disabled]="!canShiftPrevious()" aria-label="Periodo anterior">‹</button>
+          <span class="period-label">{{ visibleRangeLabel() }}</span>
+          <button class="period-btn" (click)="shiftTimelineByMonths(1)" [disabled]="!canShiftNext()" aria-label="Periodo siguiente">›</button>
+          <button class="chip" (click)="centerTimelineOnToday()">Ir a hoy</button>
+          <span class="today-indicator" [class.in-range]="todayInRange()" [class.out-range]="!todayInRange()">
+            {{ todayIndicatorText() }}
+          </span>
+        </div>
+      </div>
+      <div
+        class="timeline-scroll"
+        (click)="onMainTimelineClick()"
+        (wheel)="onTimelineWheel($event)"
+        (pointerdown)="onTimelinePointerDown($event)"
+        (pointermove)="onTimelinePointerMove($event)"
+        (pointerup)="onTimelinePointerUp($event)"
+        (pointercancel)="onTimelinePointerUp($event)"
+      >
+        <div class="gantt-grid" [style.--timeline-width.px]="timelineWidth()">
+          <div class="left-head row-grid">
+            <span>Task name</span>
+            <span>Assignees</span>
+            <span>Due</span>
+            <span>State</span>
+          </div>
+          <div class="right-head">
+            <div class="month-header" [style.width.px]="timelineWidth()">
+              @for (month of visibleMonthBands(); track month.key) {
+                <span class="month-cell" [style.left.px]="month.left * zoom()" [style.width.px]="month.days * zoom()">{{ month.label }}</span>
+              }
+            </div>
+            <div class="day-header" [style.width.px]="timelineWidth()">
+              @for (day of visibleDayTicks(); track day.dayIndex) {
+                <span class="day-tick" [style.width.px]="zoom()" [class.is-saturday]="day.isSaturday" [class.is-sunday]="day.isSunday" [class.is-holiday]="day.isHoliday" [class.is-non-working]="!day.isWorking" [attr.title]="dayTickTitle(day)">
+                  @if (day.dayLabel) {
+                    <small>{{ shortWeekday(day.dayLabel, day.dayIndex) }}</small>
+                  } @else {
+                    <small>{{ shortWeekday('', day.dayIndex) }}</small>
+                  }
+                  @if (day.date) {
+                    <strong>{{ day.dayNumber }}</strong>
+                  } @else {
+                    <strong>{{ day.dayIndex + 1 }}</strong>
+                  }
+                  @if (day.isHoliday) {
+                    <i class="day-flag flag-holiday" aria-hidden="true"></i>
+                  } @else if (day.isSunday) {
+                    <i class="day-flag flag-sunday" aria-hidden="true"></i>
+                  } @else if (day.isSaturday) {
+                    <i class="day-flag flag-saturday" aria-hidden="true"></i>
+                  }
+                </span>
+              }
+            </div>
+          </div>
+
+          <div class="body-left">
+            @for (row of visibleTaskRows(); track row.task.id) {
+              <div class="task-row-left row-grid" [class.task-row-active]="selectedTaskId() === row.task.id" (click)="selectTask(row.task.id)">
+                <span class="cell-task">
+                  <span class="task-tree" [style.padding-left.px]="row.depth * 14">
+                    @if (row.hasChildren) {
+                      <button class="expander" (click)="$event.stopPropagation(); toggleTaskCollapse(row.task.id)">
+                        {{ isTaskCollapsed(row.task.id) ? '▸' : '▾' }}
+                      </button>
+                    } @else {
+                      <span class="expander-spacer"></span>
+                    }
+                    <span class="task-main">
+                      <strong>{{ row.task.id }}</strong>
+                      <em>{{ row.task.title }}</em>
+                    </span>
+                  </span>
+                </span>
+                <span class="assignees">
+                  @for (badge of assigneesForTask(row.task); track badge + '-' + $index) {
+                    <i class="avatar" [ngClass]="assigneeClass(badge.key)" [attr.title]="badge.label">{{ assigneeInitials(badge) }}</i>
+                  }
+                </span>
+                <span>{{ row.task.endDate }}</span>
+                <span class="state-cell" [ngClass]="statusClass(row.task)">
+                  <i>{{ statusIcon(row.task) }}</i>
+                  <b>{{ statusLabel(row.task) }}</b>
+                </span>
+              </div>
+            }
+          </div>
+
+          <div class="body-right" [style.width.px]="timelineWidth()" [style.height.px]="timelineBodyHeight()">
+            <div class="non-working-layer">
+              @for (band of nonWorkingBands(); track band.key) {
+                <span class="non-working-band" [class.band-holiday]="band.type === 'holiday'" [class.band-sunday]="band.type === 'sunday'" [class.band-saturday]="band.type === 'saturday'" [style.left.px]="band.left" [style.width.px]="zoom()"></span>
+              }
+            </div>
+            <div class="today-layer" aria-hidden="true">
+              @if (todayMarkerLeft() !== null) {
+                <span class="today-line-dot" [style.left.px]="todayMarkerLeft()!"></span>
+                <span class="today-line" [style.left.px]="todayMarkerLeft()!"></span>
+              }
+            </div>
+            <svg class="dependency-layer" [attr.width]="timelineWidth()" [attr.height]="timelineBodyHeight()" aria-hidden="true">
+              <defs>
+                <marker id="dep-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                  <path d="M 0 0 L 6 3 L 0 6 z" class="dep-arrow-head" />
+                </marker>
+              </defs>
+              @for (line of dependencyLines(); track line.key) {
+                <path [attr.d]="line.d" [attr.class]="line.lineClass" marker-end="url(#dep-arrow)" />
+                <circle [attr.cx]="line.x2" [attr.cy]="line.y2" r="2.1" [attr.class]="line.dotClass" />
+              }
+            </svg>
+
+            @for (row of visibleTaskRows(); track row.task.id) {
+              <div class="task-row-right" [class.task-row-active]="selectedTaskId() === row.task.id">
+                <div class="task-track" [style.width.px]="timelineWidth()">
+                  <button
+                    class="task-bar"
+                    [ngClass]="taskClass(row.task)"
+                    [ngStyle]="taskBarStyle(row.task)"
+                    [attr.title]="taskTooltip(row.task)"
+                    (click)="selectTask(row.task.id)"
+                  >
+                    <span class="progress-pill">{{ taskProgressPercent(row.task) }}%</span>
+                    <span class="duration">{{ row.task.durationIaHours }}h</span>
+                  </button>
+                  <span class="task-bar-label" [ngStyle]="taskLabelStyle(row.task)">{{ row.task.title }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </article>
+
+    @if (showAdvancedUi()) {
+    <article class="card tall panel" [class.collapsed]="!showRoutePanel()">
+      <div class="panel-head">
+        <h2>Ruta recomendada</h2>
+        <button class="chip panel-toggle" (click)="showRoutePanel.set(!showRoutePanel())">
+          {{ showRoutePanel() ? 'Ocultar' : 'Ver ruta' }}
+        </button>
+      </div>
+
+      @if (showRoutePanel()) {
+        <p class="sub">Secuencia critica para minimizar tiempo total del proyecto.</p>
+        <div class="route-list">
+          @for (step of gantt()?.criticalPath?.route || []; track step.id) {
+            <button
+              class="route-step"
+              [class.route-step-active]="selectedTaskId() === step.id"
+              (click)="selectTask(step.id)"
+            >
+              <span class="route-id">{{ step.id }}</span>
+              <span class="route-name">{{ step.title }}</span>
+              <span class="route-meta">{{ step.durationIaHours }}h · {{ step.priority }}</span>
+            </button>
+          }
+        </div>
+
+        @if (selectedTask()) {
+          <div class="task-inspector">
+            <p class="inspector-kicker">Detalle seleccionado</p>
+            <h3>{{ selectedTask()?.id }} · {{ selectedTask()?.title }}</h3>
+            <p>
+              Carril: <strong>{{ laneLabel(selectedTask()?.lane || '') }}</strong> · Duracion:
+              <strong>{{ selectedTask()?.durationIaHours }} h IA</strong>
+            </p>
+            <p>Dependencias: {{ dependencySummary(selectedTask()!) }}</p>
+            <p>Estado: {{ selectedTask()?.status }} · Prioridad: {{ selectedTask()?.priority }}</p>
+            <p>Modelo principal: {{ primaryModelForTask(selectedTask()!)?.label || 'Sin modelo' }}</p>
+            <p>
+              Ventana sugerida: H{{ selectedTask()?.startIaHour }} a H{{ selectedTask()?.endIaHour }}
+            </p>
+            <p>
+              Calendario: {{ selectedTask()?.startDate }} a {{ selectedTask()?.endDate }}
+            </p>
+
+            <div class="dependency-editor">
+              <p class="inspector-kicker">Dependencias tipo Project</p>
+              <p class="sub">Define secuencia o paralelismo real con FS/SS/FF/SF y desfase.</p>
+
+              <div class="dependency-editor-grid">
+                @for (row of dependencyDraftRows(); track $index) {
+                  <div class="dependency-row">
+                    <select [ngModel]="row.id" (ngModelChange)="updateDependencyDraftTask($index, $event)">
+                      <option value="">Selecciona tarea</option>
+                      @for (candidate of dependencyEditorCandidateTasks(); track candidate.id) {
+                        <option [value]="candidate.id">{{ candidate.id }} · {{ candidate.title }}</option>
+                      }
+                    </select>
+
+                    <select [ngModel]="row.relation" (ngModelChange)="updateDependencyDraftRelation($index, $event)">
+                      <option value="FS">FS</option>
+                      <option value="SS">SS</option>
+                      <option value="FF">FF</option>
+                      <option value="SF">SF</option>
+                    </select>
+
+                    <input type="number" step="1" [ngModel]="row.lagValue" (ngModelChange)="updateDependencyDraftLagValue($index, $event)" />
+
+                    <select [ngModel]="row.lagUnit" (ngModelChange)="updateDependencyDraftLagUnit($index, $event)">
+                      <option value="d">dias habiles</option>
+                      <option value="h">horas IA</option>
+                    </select>
+
+                    <button class="chip danger" (click)="removeDependencyDraftRow($index)">Quitar</button>
+                  </div>
+                }
+              </div>
+
+              <div class="dependency-editor-actions">
+                <button class="chip" (click)="addDependencyDraftRow()">Agregar dependencia</button>
+                <button class="chip" [disabled]="dependencySaveState() === 'saving'" (click)="saveSelectedTaskDependencies()">
+                  {{ dependencySaveState() === 'saving' ? 'Guardando...' : 'Guardar dependencias' }}
+                </button>
+              </div>
+
+              @if (dependencySaveMessage()) {
+                <p class="dependency-save" [class.error]="dependencySaveState() === 'error'" [class.ok]="dependencySaveState() === 'done'">{{ dependencySaveMessage() }}</p>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="parallel-card">
+          <p class="inspector-kicker">Trabajo paralelo detectado</p>
+          @for (group of gantt()?.parallelGroups || []; track group.startIaHour) {
+            <p class="parallel-line">Hora H{{ group.startIaHour }}: {{ group.ids.join(' · ') }}</p>
+          }
+        </div>
+      }
+    </article>
+    }
+  </section>
+
+  @if (showAdvancedUi()) {
+  <section class="legend card">
+    <h2>Leyenda de color</h2>
+    <div class="legend-grid">
+      <span class="legend-item lane-bugs">Bugs</span>
+      <span class="legend-item lane-mejoras">Mejoras</span>
+      <span class="legend-item lane-critical">Ruta critica</span>
+      <span class="legend-item lane-parallel">Lista para paralelo</span>
+      <span class="legend-item lane-selected">Seleccionada</span>
+    </div>
+  </section>
+  }
+
+  @if (!gantt() && !loading()) {
+    <section class="search-card">
+      <p class="sub">No hay datos Gantt disponibles para el proyecto seleccionado.</p>
+    </section>
+  }
+
+  @if (isTimelineModalOpen()) {
+    <div class="timeline-modal-backdrop" (click)="closeTimelineModal()">
+      <section class="timeline-modal" (click)="$event.stopPropagation()">
+        <header class="timeline-modal-head">
+          <h2>Timeline ampliado</h2>
+          <div class="timeline-modal-controls">
+            <button class="period-btn" (click)="zoomBy(-4)">-</button>
+            <button class="period-btn" (click)="zoomBy(4)">+</button>
+            <button class="period-btn" (click)="shiftTimelineByMonths(-1)" [disabled]="!canShiftPrevious()">‹</button>
+            <span class="period-label">{{ visibleRangeLabel() }}</span>
+            <button class="period-btn" (click)="shiftTimelineByMonths(1)" [disabled]="!canShiftNext()">›</button>
+            <button class="chip" (click)="centerTimelineOnToday()">Ir a hoy</button>
+            <button class="chip" (click)="closeTimelineModal()">Cerrar</button>
+          </div>
+        </header>
+
+        <div
+          class="timeline-modal-scroll"
+          (wheel)="onTimelineWheel($event)"
+          (pointerdown)="onTimelinePointerDown($event)"
+          (pointermove)="onTimelinePointerMove($event)"
+          (pointerup)="onTimelinePointerUp($event)"
+          (pointercancel)="onTimelinePointerUp($event)"
+        >
+          <div class="gantt-grid gantt-grid-modal" [style.--timeline-width.px]="timelineWidth()">
+            <div class="left-head row-grid">
+              <span>Task name</span>
+              <span>Assignees</span>
+              <span>Due</span>
+              <span>State</span>
+            </div>
+            <div class="right-head">
+              <div class="month-header" [style.width.px]="timelineWidth()">
+                @for (month of visibleMonthBands(); track month.key) {
+                  <span class="month-cell" [style.left.px]="month.left * zoom()" [style.width.px]="month.days * zoom()">{{ month.label }}</span>
+                }
+              </div>
+              <div class="day-header" [style.width.px]="timelineWidth()">
+                @for (day of visibleDayTicks(); track day.dayIndex) {
+                  <span class="day-tick" [style.width.px]="zoom()" [class.is-saturday]="day.isSaturday" [class.is-sunday]="day.isSunday" [class.is-holiday]="day.isHoliday" [class.is-non-working]="!day.isWorking" [attr.title]="dayTickTitle(day)">
+                    @if (day.dayLabel) {
+                      <small>{{ shortWeekday(day.dayLabel, day.dayIndex) }}</small>
+                    } @else {
+                      <small>{{ shortWeekday('', day.dayIndex) }}</small>
+                    }
+                    @if (day.date) {
+                      <strong>{{ day.dayNumber }}</strong>
+                    } @else {
+                      <strong>{{ day.dayIndex + 1 }}</strong>
+                    }
+                  </span>
+                }
+              </div>
+            </div>
+
+            <div class="body-left">
+              @for (row of visibleTaskRows(); track row.task.id) {
+                <div class="task-row-left row-grid" [class.task-row-active]="selectedTaskId() === row.task.id" (click)="selectTask(row.task.id)">
+                  <span class="cell-task">
+                    <span class="task-tree" [style.padding-left.px]="row.depth * 14">
+                      @if (row.hasChildren) {
+                        <button class="expander" (click)="$event.stopPropagation(); toggleTaskCollapse(row.task.id)">
+                          {{ isTaskCollapsed(row.task.id) ? '▸' : '▾' }}
+                        </button>
+                      } @else {
+                        <span class="expander-spacer"></span>
+                      }
+                      <span class="task-main">
+                        <strong>{{ row.task.id }}</strong>
+                        <em>{{ row.task.title }}</em>
+                      </span>
+                    </span>
+                  </span>
+                  <span class="assignees">
+                    @for (badge of assigneesForTask(row.task); track badge + '-' + $index) {
+                      <i class="avatar" [ngClass]="assigneeClass(badge.key)" [attr.title]="badge.label">{{ assigneeInitials(badge) }}</i>
+                    }
+                  </span>
+                  <span>{{ row.task.endDate }}</span>
+                  <span class="state-cell" [ngClass]="statusClass(row.task)">
+                    <i>{{ statusIcon(row.task) }}</i>
+                    <b>{{ statusLabel(row.task) }}</b>
+                  </span>
+                </div>
+              }
+            </div>
+
+            <div class="body-right" [style.width.px]="timelineWidth()" [style.height.px]="timelineBodyHeight()">
+              <div class="non-working-layer">
+                @for (band of nonWorkingBands(); track band.key) {
+                  <span class="non-working-band" [class.band-holiday]="band.type === 'holiday'" [class.band-sunday]="band.type === 'sunday'" [class.band-saturday]="band.type === 'saturday'" [style.left.px]="band.left" [style.width.px]="zoom()"></span>
+                }
+              </div>
+                <div class="today-layer" aria-hidden="true">
+                  @if (todayMarkerLeft() !== null) {
+                    <span class="today-line-dot" [style.left.px]="todayMarkerLeft()!"></span>
+                    <span class="today-line" [style.left.px]="todayMarkerLeft()!"></span>
+                  }
+                </div>
+              <svg class="dependency-layer" [attr.width]="timelineWidth()" [attr.height]="timelineBodyHeight()" aria-hidden="true">
+                <defs>
+                  <marker id="dep-arrow-modal" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                    <path d="M 0 0 L 6 3 L 0 6 z" class="dep-arrow-head" />
+                  </marker>
+                </defs>
+                @for (line of dependencyLines(); track line.key) {
+                  <path [attr.d]="line.d" [attr.class]="line.lineClass" marker-end="url(#dep-arrow-modal)" />
+                  <circle [attr.cx]="line.x2" [attr.cy]="line.y2" r="2.1" [attr.class]="line.dotClass" />
+                }
+              </svg>
+
+              @for (row of visibleTaskRows(); track row.task.id) {
+                <div class="task-row-right" [class.task-row-active]="selectedTaskId() === row.task.id">
+                  <div class="task-track" [style.width.px]="timelineWidth()">
+                    <button class="task-bar" [ngClass]="taskClass(row.task)" [ngStyle]="taskBarStyle(row.task)" [attr.title]="taskTooltip(row.task)" (click)="selectTask(row.task.id)">
+                      <span class="progress-pill">{{ taskProgressPercent(row.task) }}%</span>
+                      <span class="duration">{{ row.task.durationIaHours }}h</span>
+                    </button>
+                    <span class="task-bar-label" [ngStyle]="taskLabelStyle(row.task)">{{ row.task.title }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  }
+</div>
+</div>

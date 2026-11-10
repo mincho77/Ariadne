@@ -48,7 +48,7 @@ When the user asks to develop, implement, build, or execute a registered Enhance
 - Treat `preferred` as JEV's choice signal, not an automatic winner. Compare the per-task value/alignment, implementation readiness, dependency readiness, and risk/effort signals with actual backlog evidence and explain tradeoffs, confidence, and probabilities. If the Hub/JEV is unavailable or disabled, provide the normal conversational comparison without JEV.
 - Never change status, reorder a queue, or authorize a task from this recommendation. Ask the user which task they want to start; perform a board change only after explicit authorization.
 
-## Route lite vs full (Cursor)
+## Operating modes (single skill)
 
 Before deep context, classify the request:
 
@@ -59,8 +59,8 @@ npm run ariadne:launcher -- "<user message>"   # adds skillFile + env
 
 | Result | Load |
 |--------|------|
-| `ariadne-lite` | `skills/ariadne-lite/SKILL.md` |
-| `ariadne` | this file |
+| `lite` | this file; use concise backlog/ledger workflow |
+| `full` | this file; use complete planning, audit, implementation and deployment rules |
 
 Cursor rule (always on): `.cursor/rules/ariadne-route.mdc`. Wrapper docs: `docs/ariadne-launcher.md`.
 

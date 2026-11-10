@@ -54,5 +54,5 @@ test('ariadne-route-hint CLI emits JSON', () => {
   });
   assert.equal(result.status, 0);
   const body = JSON.parse(result.stdout);
-  assert.equal(body.skill, 'ariadne-lite');
+  assert.equal(body.skill, 'ariadne');
 });

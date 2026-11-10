@@ -50,10 +50,32 @@
     <form method="dialog" id="project-form">
       <h2>Nuevo proyecto</h2>
       <label>Nombre<input name="name" required placeholder="Ej. Proyecto Demo IA"></label>
-      <label>Ruta existente <span>(opcional)</span><input name="path" placeholder="/ruta/al/proyecto"></label>
+      <label>Ruta existente <span>(local o Google Drive sincronizado)</span><input name="path" placeholder="/ruta/al/proyecto"></label>
+      <label>Ubicación<select name="locationType"><option value="local">Proyecto local</option><option value="drive-sync">Google Drive sincronizado</option></select></label>
+      <label>Visibilidad<select name="visibility"><option value="private">Solo este equipo</option><option value="team">Equipo colaborador</option></select></label>
+      <label>Responsable <span>(opcional)</span><input name="owner" placeholder="correo o nombre"></label>
+      <label>Colaboradores <span>(separados por coma)</span><textarea name="members" rows="3" placeholder="Daniel Vanegas, otra-persona@ejemplo.com"></textarea></label>
+      <p class="form-help">La visibilidad se guarda como configuración del proyecto. La restricción real entre personas requiere autenticación; el Hub actual es local.</p>
       <div class="dialog-actions">
         <button value="cancel" class="btn-secondary">Cancelar</button>
         <button class="btn-primary" value="default">Crear</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="settings-dialog">
+    <form method="dialog" id="settings-form">
+      <h2>Configurar proyecto</h2>
+      <input type="hidden" name="slug">
+      <label>Nombre<input name="name" required></label>
+      <label>Ruta<input name="path" required></label>
+      <label>Ubicación<select name="locationType"><option value="local">Proyecto local</option><option value="drive-sync">Google Drive sincronizado</option></select></label>
+      <label>Visibilidad<select name="visibility"><option value="private">Solo este equipo</option><option value="team">Equipo colaborador</option></select></label>
+      <label>Responsable<input name="owner" placeholder="correo o nombre"></label>
+      <label>Colaboradores <span>(separados por coma)</span><textarea name="members" rows="3"></textarea></label>
+      <p class="form-help">Ariadne muestra esta política, pero no puede aplicar permisos multiusuario mientras el Hub siga siendo local y sin inicio de sesión.</p>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn-secondary">Cancelar</button>
+        <button class="btn-primary" value="default">Guardar</button>
       </div>
     </form>
   </dialog>

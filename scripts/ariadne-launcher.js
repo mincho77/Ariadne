@@ -17,7 +17,7 @@ function readMessage(argv) {
 function buildLaunchPlan(message) {
   const hint = classifyMessage(message);
   const skillName = hint.skill;
-  const skillDir = path.join(ROOT, 'skills', skillName);
+  const skillDir = path.join(ROOT, 'skills', 'ariadne');
   const skillFile = path.join(skillDir, 'SKILL.md');
   if (!fs.existsSync(skillFile)) {
     throw new Error(`skill file not found: ${path.relative(ROOT, skillFile)}`);
@@ -38,7 +38,7 @@ function buildLaunchPlan(message) {
       ARIADNE_ROUTE_MODE: hint.mode,
     },
     instructions: hint.mode === 'lite'
-      ? 'Load skills/ariadne-lite/SKILL.md only; avoid lib/gantt and deploy flows unless user escalates.'
+      ? 'Load skills/ariadne/SKILL.md and use its lightweight operating mode; escalate to full governance when scope grows.'
       : 'Load skills/ariadne/SKILL.md; full governance and code audit rules apply.',
   };
 }

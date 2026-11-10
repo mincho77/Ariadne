@@ -2,7 +2,7 @@
 
 **A local-first project hub for teams and AI coding agents.** Ariadne brings project Kanban boards, Gantt planning, project audits, and Git-friendly Markdown task tracking into one app on your computer.
 
-Your project files stay on your machine. Ariadne stores its project catalog locally and does not require a hosted account.
+Your project files stay on your machine. Register any existing project by its full local path, even when it lives outside the Ariadne folder. Ariadne stores its project catalog locally and does not require a hosted account.
 
 ## Quick start
 
@@ -45,6 +45,10 @@ npx ariadne-hub start
 ```
 
 The package is not published yet. The GitHub installation above works now.
+
+## Gantt planning
+
+Open a project's Gantt view at `/gantt/?project=<slug>` from its Hub card. The editable UI is bundled with Ariadne and uses the same local Hub; there is no separate Gantt repository or server to install.
 
 ## How it works
 

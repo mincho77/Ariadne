@@ -976,7 +976,7 @@ npm run ariadne:launcher -- "actualiza el ledger"
 eval "$(./scripts/ariadne-launcher.sh 'mueve a cola')"
 ```
 
-Modo liviano y automatización: `docs/ariadne-lite.md` · `docs/ariadne-automation.md` · launcher `docs/ariadne-launcher.md`.
+Un solo skill Ariadne con modo liviano o completo: `skills/ariadne/SKILL.md` · automatización: `docs/ariadne-automation.md` · launcher: `docs/ariadne-launcher.md`.
 
 Los proyectos externos se registran únicamente en el archivo local `projects.json`, que Git ignora.
 

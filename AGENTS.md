@@ -21,9 +21,9 @@ npm run ariadne:audit   # audit only (same as sync step 1)
 
 Kanban task APIs (`/api/tasks/*`) listen on **`ARIADNE_BOARD_PORT`** (default `6421`); hub/Gantt on **`ARIADNE_HUB_PORT`** (default `4177`). Integration tests that exercise create/status/content must start both ports (see `tests/two-project-lifecycle.test.js`).
 
-### Lite vs full skill
+### Ariadne skill modes
 
-Simple backlog/ledger updates: **`skills/ariadne-lite/`** (`docs/ariadne-lite.md`). After edits: **`npm run ariadne:sync -- --fix`** (`docs/ariadne-automation.md`).
+Use one skill, **`skills/ariadne/SKILL.md`**, in lightweight or full mode as selected by the route hint. After edits: **`npm run ariadne:sync -- --fix`** (`docs/ariadne-automation.md`).
 
 **Invariant:** open ledger work that cites `AH-E-*` / `*-B-*` must have a Kanban card (`ariadne:audit` fails on `LEDGER_WITHOUT_KANBAN`).
 
@@ -58,6 +58,6 @@ Ledger: `docs/plans/ariadne-gantt.md` (AH-E-9 … AH-E-29 **cerrado**).
 - `projects.json` (machine-local paths)
 - Ad-hoc sandboxes under `/tmp`
 
-### UI Gantt externa
+### UI Gantt integrada
 
-La UI Gantt es opcional y se configura mediante `ARIADNE_GANTT_UI_REPO` y `ARIADNE_GANTT_UI_URL`. El backend se valida con `npm run gantt:smoke`.
+La UI Gantt se sirve desde el Hub en `/gantt/`; no requiere otro repositorio ni puerto. El backend y la UI se validan con `npm run gantt:smoke`.
